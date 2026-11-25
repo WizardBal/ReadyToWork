@@ -6,7 +6,7 @@
 ## SavedVariables: ReadyToWorkDB
 ## SavedVariablesPerCharacter: ReadyToWorkTravel
 ## IconTexture: Interface\Icons\INV_Misc_Bag_10
-# ## X-Curse-Project-ID: YOUR_CURSEFORGE_PROJECT_ID
+## X-Curse-Project-ID: 1831524
 # ## X-Wago-ID: YOUR_WAGO_PROJECT_ID
 
 Core\Core.lua
