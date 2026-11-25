@@ -1,0 +1,8 @@
+<Bindings>
+	<Binding name="READYTOWORK_SETTINGS" header="READYTOWORK" category="ADDONS">ReadyToWork_Binding("settings")</Binding>
+	<Binding name="READYTOWORK_MENU" category="ADDONS">ReadyToWork_Binding("menu")</Binding>
+	<Binding name="READYTOWORK_UNLOCK" category="ADDONS">ReadyToWork_Binding("unlock")</Binding>
+	<Binding name="READYTOWORK_TALK_SKIP" category="ADDONS">ReadyToWork_Binding("talk skip")</Binding>
+	<Binding name="READYTOWORK_TALK_ACCEPT" category="ADDONS">ReadyToWork_Binding("talk accept")</Binding>
+	<Binding name="READYTOWORK_TALK_TURNIN" category="ADDONS">ReadyToWork_Binding("talk turnin")</Binding>
+</Bindings>

@@ -1,0 +1,38 @@
+## Interface: 16001
+## Title: ReadyToWork
+## Notes: Private quest markers, automatic junk selling, opening clams and other containers, flight timers, the skill herbs, ore, chests and fishing pools need on their tooltips, skipping NPC chat and accepting or handing in quests (each on its own switch), quick bag cleanup, action bars kept on your highest spell ranks, and named action bar profiles you can swap between, plus one minimap button that fans out your other addons' buttons. Formerly BalHelper and Minimap Fan.
+## Author: Bal
+## Version: 1.57.0
+## SavedVariables: ReadyToWorkDB
+## SavedVariablesPerCharacter: ReadyToWorkTravel
+## IconTexture: Interface\Icons\INV_Misc_Bag_10
+# ## X-Curse-Project-ID: YOUR_CURSEFORGE_PROJECT_ID
+# ## X-Wago-ID: YOUR_WAGO_PROJECT_ID
+
+Core\Core.lua
+Core\Features.lua
+Core\Migrate.lua
+Core\Store.lua
+Core\Frames.lua
+AutoVendor.lua
+AutoOpen.lua
+FlightTimes.lua
+FlightTimer.lua
+GatherData.lua
+GatherTips.lua
+Talk.lua
+QuickDestroy.lua
+QuestKills.lua
+MaxSpells.lua
+BarLayouts.lua
+BarSwap.lua
+MinimapFanLayout.lua
+MinimapFanArt.lua
+UI\Widgets.lua
+UI\Options.lua
+UI\Launcher.lua
+UI\Menu.lua
+UI\Window.lua
+UI\Unlock.lua
+UI\Intro.lua
+UI\Entry.lua

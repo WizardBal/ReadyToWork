@@ -1,0 +1,17 @@
+package-as: ReadyToWork
+
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - .git
+  - .github
+  - .gitignore
+  - .pkgmeta
+  - IDEAS.md
+  - Tools
+  - "*.py"
+  - "*.bak"
