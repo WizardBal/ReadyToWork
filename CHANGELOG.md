@@ -30,7 +30,6 @@
   - Replaced **Don't show this again** with **Don't show automatically on future updates**.
 - **Community release prep:**
   - Added `.pkgmeta`, `.gitignore`, `.github/workflows/release.yml` (`BigWigsMods/packager`), and CurseForge/Wago ID placeholders in `ReadyToWork.toc`.
-  - Saved future helper ideas in `IDEAS.md`.
 
 ## 1.56.0 (2026-11-25): Combat resilience, Bar auto-update fix & polish
 

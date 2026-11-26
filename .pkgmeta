@@ -11,7 +11,3 @@ ignore:
   - .github
   - .gitignore
   - .pkgmeta
-  - IDEAS.md
-  - Tools
-  - "*.py"
-  - "*.bak"
