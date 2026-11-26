@@ -10,6 +10,7 @@ local W = Helper.Widgets
 local SHOW_DELAY = 3          -- seconds after login, once the login chat has settled
 local WIDTH, LINE_HEIGHT = 790, 28
 local RELEASE_NOTES = {
+  ["1.57.3"] = "What's new: Fixed the Intro window's 'Don't show automatically on future updates' checkbox so it visually checks and saves reliably, and added a top-right close button.",
   ["1.57.2"] = "What's new: Bar profiles and Quick destroy swap buttons now dismiss their tooltip when the fan opens and anchor tooltips away from screen edges and fan tiles.",
   ["1.57.1"] = "What's new: Custom Orc Peon icon, indented parent/child switches, Bar profiles chat toggle (off by default), and a dedicated ReadyToWork keybindings category.",
   ["1.57.0"] = "What's new: Intro now appears once after each update (keeping your settings), bar auto-update stays quiet on login, and release packaging is ready.",
@@ -91,9 +92,12 @@ local function Layout(opts)
   local bottomAnchor = listBox
   local whatsNewH = 0
   if note then
+    frame.WhatsNew:SetHeight(0)
     frame.WhatsNew:SetText(note)
     frame.WhatsNew:Show()
-    whatsNewH = math.max(18, math.ceil(tonumber(frame.WhatsNew.GetStringHeight and frame.WhatsNew:GetStringHeight()) or 18)) + 8
+    local textH = math.max(18, math.ceil(tonumber(frame.WhatsNew.GetStringHeight and frame.WhatsNew:GetStringHeight()) or 18))
+    frame.WhatsNew:SetHeight(textH)
+    whatsNewH = textH + 8
     bottomAnchor = frame.WhatsNew
   else
     frame.WhatsNew:Hide()
@@ -101,7 +105,9 @@ local function Layout(opts)
 
   frame.Footer:ClearAllPoints()
   frame.Footer:SetPoint("TOPLEFT", bottomAnchor, "BOTTOMLEFT", 0, -10)
+  frame.Footer:SetHeight(0)
   local footerH = math.max(18, math.ceil(tonumber(frame.Footer.GetStringHeight and frame.Footer:GetStringHeight()) or 18))
+  frame.Footer:SetHeight(footerH)
   local height = listTop + listHeight + whatsNewH + footerH + 62
   frame:SetSize(WIDTH, height)
   local sw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
@@ -173,9 +179,18 @@ local function Build()
   frame.Title:SetText("ReadyToWork")
   frame.Subtitle = W.Font(frame, "dim")
   frame.Subtitle:SetPoint("TOPLEFT", frame.Title, "BOTTOMLEFT", 0, -4)
-  frame.Subtitle:SetWidth(WIDTH - 90)
+  frame.Subtitle:SetWidth(WIDTH - 120)
   frame.Subtitle:SetText("Toggle any helper right here, or open Settings for details.")
   W.Rule(frame, "TOPLEFT", 18, -64, WIDTH - 36)
+
+  local closeX = W.Button(frame, "", "ghost")
+  closeX:SetSize(28, 28); closeX:SetPoint("TOPRIGHT", -14, -16)
+  closeX.glyph = W.Glyph(closeX, "icon_close.png", 12, W.colors.dim)
+  closeX.glyph:SetPoint("CENTER")
+  closeX:SetScript("OnEnter", function(self) W.SetColor(self.glyph, unpack(W.colors.text)) end)
+  closeX:SetScript("OnLeave", function(self) W.SetColor(self.glyph, unpack(W.colors.dim)) end)
+  closeX:SetScript("OnClick", function() frame:Hide() end)
+  frame.CloseX = closeX
 
   listBox = CreateFrame("Frame", nil, frame)
   listBox:SetPoint("TOPLEFT", 18, -listTop)
@@ -220,12 +235,13 @@ local function Build()
   frame.Footer = W.Font(frame, "dim")
   frame.Footer:SetPoint("TOPLEFT", listBox, "BOTTOMLEFT", 0, -10)
   frame.Footer:SetWidth(WIDTH - 36)
+  if frame.Footer.SetWordWrap then frame.Footer:SetWordWrap(true) end
   frame.Footer:SetText("Left-click the minimap button for the fan, right-click for the quick menu, Shift-click (or /rtw settings) for settings. /rtw unlock moves frames.")
 
   frame.DontShow = W.Checkbox(frame)
   frame.DontShow:SetPoint("BOTTOMLEFT", 18, 16)
   frame.DontShow:SetHitRectInsets(0, -245, -4, -4)
-  frame.DontShow:SetScript("OnClick", function(self) Helper.db.intro.skipUpdates = self:GetChecked() == true end)
+  frame.DontShow:HookScript("OnClick", function(self) Helper.db.intro.skipUpdates = self:GetChecked() == true end)
   frame.DontShowLabel = W.Font(frame, "small")
   frame.DontShowLabel:SetPoint("LEFT", frame.DontShow, "RIGHT", 8, 0)
   frame.DontShowLabel:SetText("Don't show automatically on future updates")
@@ -240,6 +256,12 @@ local function Build()
   frame.Menu:SetSize(96, 26); frame.Menu:SetPoint("RIGHT", frame.Settings, "LEFT", -6, 0)
   frame.Menu:SetScript("OnClick", function() frame:Hide(); if Helper.ShowMenu then Helper.ShowMenu() end end)
 
+  frame:SetScript("OnHide", function()
+    if Helper.db and type(Helper.db.intro) == "table" then
+      Helper.db.intro.seenVersion = Helper.version
+      Helper.db.intro.show = false
+    end
+  end)
   frame:Hide()
   if type(UISpecialFrames) == "table" then
     table.insert(UISpecialFrames, "ReadyToWorkIntro")   -- Escape closes it

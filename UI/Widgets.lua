@@ -487,7 +487,7 @@ function W.Checkbox(parent)
     return self._checked == true
   end
 
-  cb:HookScript("OnClick", function(self)
+  local function syncFromClick(self)
     if origGet then
       local ok, res = pcall(origGet, self)
       if ok and type(res) == "boolean" then self._checked = res else self._checked = not self._checked end
@@ -495,7 +495,24 @@ function W.Checkbox(parent)
       self._checked = not self._checked
     end
     sync(self)
-  end)
+  end
+
+  cb:SetScript("OnClick", syncFromClick)
+  local origSetScript = cb.SetScript
+  if type(origSetScript) == "function" then
+    cb.SetScript = function(self, scriptType, handler)
+      if scriptType == "OnClick" then
+        if type(handler) == "function" then
+          return origSetScript(self, "OnClick", function(btn, ...)
+            syncFromClick(btn)
+            return handler(btn, ...)
+          end)
+        end
+        return origSetScript(self, "OnClick", syncFromClick)
+      end
+      return origSetScript(self, scriptType, handler)
+    end
+  end
   return cb
 end
 

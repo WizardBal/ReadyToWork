@@ -1,5 +1,11 @@
 # ReadyToWork Changelog
 
+## 1.57.3 (2026-11-26): Intro checkbox & close button fix
+
+- **Introduction window (`UI/Intro.lua`, `UI/Widgets.lua`):**
+  - Fixed `W.Checkbox` click synchronization so clicking **Don't show automatically on future updates** reliably displays its checkmark/accent state and saves `skipUpdates`.
+  - Added a top-right **Close (`X`)** button, clean footer/release-note text wrapping, and `OnHide` persistence for `seenVersion`.
+
 ## 1.57.2 (2026-11-26): Clean fan button tooltips
 
 - **Bar profiles & Quick destroy buttons:**
