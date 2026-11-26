@@ -572,7 +572,9 @@ function UI.Refresh()
   if not settings.buttonHint then
     -- Said once, the first time the button appears.
     settings.buttonHint = true
-    Helper.Print("Click the blue book button to switch bar profiles. Right-click it for bar profile settings, Alt-drag to move it.")
+    if settings.reportChat then
+      Helper.Print("Click the blue book button to switch bar profiles. Right-click it for bar profile settings, Alt-drag to move it.")
+    end
   end
 end
 

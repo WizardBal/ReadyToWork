@@ -624,7 +624,9 @@ function Destroy.Refresh()
   if found and not settings.fanHint then
     -- Said once, the first time the button appears.
     settings.fanHint = true
-    Helper.Print("Click the red-edged button to see what can be destroyed, cheapest first. Click an item to destroy it, right-click to protect it. Alt-drag moves the button.")
+    if settings.reportDestroyed ~= false then
+      Helper.Print("Click the red-edged button to see what can be destroyed, cheapest first. Click an item to destroy it, right-click to protect it. Alt-drag moves the button.")
+    end
   end
   if GameTooltip:IsOwned(button) then
     button:GetScript("OnEnter")(button)

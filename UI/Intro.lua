@@ -10,6 +10,7 @@ local W = Helper.Widgets
 local SHOW_DELAY = 3          -- seconds after login, once the login chat has settled
 local WIDTH, LINE_HEIGHT = 790, 28
 local RELEASE_NOTES = {
+  ["1.57.1"] = "What's new: Custom Orc Peon icon, indented parent/child switches, Bar profiles chat toggle (off by default), and a dedicated ReadyToWork keybindings category.",
   ["1.57.0"] = "What's new: Intro now appears once after each update (keeping your settings), bar auto-update stays quiet on login, and release packaging is ready.",
 }
 local frame, listBox, listTop, listHeight
@@ -164,7 +165,7 @@ local function Build()
   W.Shadow(frame, 18, .55)
   W.Surface(frame, "lg", W.colors.window, W.colors.borderStrong, "BACKGROUND", -2)
 
-  local badge = W.IconBadge(frame, "Interface\\Icons\\INV_Misc_Bag_10", 24, 36)
+  local badge = W.IconBadge(frame, W.MEDIA .. "icon_rtw.png", 24, 36)
   badge:SetPoint("TOPLEFT", 18, -16)
   frame.Title = W.Font(frame, "title")
   frame.Title:SetPoint("TOPLEFT", badge, "TOPRIGHT", 12, -1)
@@ -260,6 +261,16 @@ Helper.Feature(function()
     Helper.Store.OnChange(function()
       if frame and frame:IsShown() then SyncAll() end
     end)
+  end
+  local intro = Helper.db and Helper.db.intro
+  if type(intro) == "table" and IsNewer(Helper.version, intro.announcedVersion) then
+    local prevAnnounced = intro.announcedVersion or intro.seenVersion
+    intro.announcedVersion = Helper.version
+    if prevAnnounced and prevAnnounced ~= "" and prevAnnounced ~= Helper.version then
+      Helper.Print(("Updated to v%s — type /rtw for settings."):format(Helper.version))
+    else
+      Helper.Print(("v%s loaded — type /rtw for settings."):format(Helper.version))
+    end
   end
   local showNow, prevVersion = ShouldAutoShow()
   if showNow then

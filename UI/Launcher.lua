@@ -581,10 +581,18 @@ local function build()
     bg:SetSize(24, 24)
     bg:SetPoint("CENTER", 0, 1)
     local icon = launcher:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_10")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    icon:SetSize(20, 20)
+    icon:SetTexture("Interface\\AddOns\\ReadyToWork\\Media\\icon_rtw.png")
+    icon:SetTexCoord(0, 1, 0, 1)
+    icon:SetSize(25, 25)
     icon:SetPoint("CENTER", 0, 1)
+    if launcher.CreateMaskTexture and icon.AddMaskTexture then
+        local ok, mask = pcall(launcher.CreateMaskTexture, launcher)
+        if ok and mask then
+            mask:SetTexture("Interface\\AddOns\\ReadyToWork\\Media\\circle.png", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetAllPoints(icon)
+            icon:AddMaskTexture(mask)
+        end
+    end
     local border = launcher:CreateTexture(nil, "OVERLAY")
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
     border:SetSize(53, 53)
@@ -659,7 +667,7 @@ local function build()
         GameTooltip:AddLine("Right-click: quick menu", 1, 1, 1)
         GameTooltip:AddLine("Shift-click: settings window", 1, 1, 1)
         if buttonDb and buttonDb.locked then
-            GameTooltip:AddLine("Locked in place (unlock it on the Minimap & fan page)", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("Locked in place (unlock it on the Minimap buttons page)", 0.8, 0.8, 0.8)
         else
             GameTooltip:AddLine("Drag: move around the minimap", 1, 1, 1)
         end

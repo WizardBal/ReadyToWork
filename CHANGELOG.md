@@ -1,5 +1,19 @@
 # ReadyToWork Changelog
 
+## 1.57.1 (2026-11-25): Custom Orc Peon icon, UI hierarchy, chat toggles & keybindings
+
+- **Custom branding & icons:**
+  - Added a custom Orc Peon icon (`Media/icon_rtw.png`) with a circular mask on the minimap button and updated **Minimap buttons** to use a distinct spyglass icon.
+- **Settings UI hierarchy & polish:**
+  - Stacked child switches directly beneath their parent toggle with an indented L-shaped connector (`Include gray quests`, `Use guild funds first`, `Lock minimap button`) and dimmed/disabled dependent sliders and choices when their parent turns them off.
+  - Fixed multi-line `note()` text wrapping, widened the header subheading margin, added 4 symmetric **Sell & repair** status chips (`Sold today`, `Sold lifetime`, `Repairs today`, `Repairs lifetime`), renamed pages for clarity (`Sell & repair`, `Auto-open`, `Gather tooltips`, `Minimap buttons`) with old-name aliases preserved, reordered the **World** section (`Quest markers`, `Talk & quests`, `Gather tooltips`, `Flight timer`), and standardized on American English (`Behavior`, `gray`, `dialog`).
+- **Chat reporting controls:**
+  - Added a **Report in chat** toggle (off by default; `/rtw bars chat on|off`) to **Bar profiles**, plus sealed remaining unguarded automatic chat prints across **Spell ranks**, **Sell & repair**, and **Quick destroy**.
+  - Added a quiet once-per-version chat notice on first load after an update.
+- **Keybindings & Gather tooltips:**
+  - Moved ReadyToWork's keybindings into their own **Options > Keybindings > ReadyToWork** category.
+  - Cleaned up **Gather tooltips** and documented Forever `1.60.1.71139` combat secret-string behavior on hovered 3D world-object names (skill ranks, zone fishing data, and corpse tooltips continue working in combat).
+
 ## 1.57.0 (2026-11-25): Quiet bar auto-update, version-aware intro & release packaging
 
 - **Bar profiles auto-update:**

@@ -23,11 +23,15 @@ local undoButton, revertButton, editStatus, resize, sliderEdit
 local inWindowEdit, bagDrawPending = false, false
 local questSampleIcons
 local questionMark = "Interface\\Icons\\INV_Misc_Bag_10"
-local CARD_TITLES = { status = "Status", behaviour = "Behaviour", appearance = "Appearance & position", lists = "Lists" }
+local CARD_TITLES = { status = "Status", behaviour = "Behavior", appearance = "Appearance & position", lists = "Lists" }
 local CARD_ORDER = { "status", "behaviour", "appearance", "lists" }
 
 local function Spec() return Helper.features[current] end
-local function iconPath(name) return name and ("Interface\\Icons\\" .. name) or questionMark end
+local rtwIcon = W.MEDIA .. "icon_rtw.png"
+local function iconPath(name)
+  if not name then return questionMark end
+  return name:find("\\", 1, true) and name or ("Interface\\Icons\\" .. name)
+end
 local function columnSize(count) return math.floor((CW - (count - 1) * GAP) / count) end
 local function isFeatureActive(key, db)
   return db ~= nil and db.enabled == true and not (key == "minimapFan" and Helper.fanStandsDown)
@@ -144,12 +148,16 @@ end
 local function note(label, style)
   local part = widget(style == "status" and "statusLine" or "note", function(kind)
     return W.Font(content, kind == "statusLine" and "body" or "dim")
-  end, X, y, CW, 20)
-  part:SetText(label)
+  end, X, y, CW, 0)
   if part.SetWordWrap then part:SetWordWrap(true) end
-  local height = math.max(18, (part:GetStringHeight() or 16) + 4)
+  if part.SetNonSpaceWrap then part:SetNonSpaceWrap(false) end
+  if part.SetJustifyV then part:SetJustifyV("TOP") end
+  part:SetWidth(CW)
+  part:SetHeight(0)
+  part:SetText(label)
+  local height = math.max(18, math.ceil((part:GetStringHeight() or 16) + 4))
   part:SetHeight(height)
-  y = y + height + 3
+  y = y + height + 6
 end
 
 -- A card: an elevated rounded panel with a header title and hairline separator.
@@ -237,67 +245,133 @@ local function CardFinish(card)
   X, CW = 0, WIDTH
 end
 
--- Tiles: toggles and radio choices in one, two, or more columns.
-local function tiles(rows, columns)
-  if not columns then columns = (#rows == 1) and 1 or 2 end
-  local width = columnSize(columns)
-  for index, row in ipairs(rows) do
-    local col = (index - 1) % columns
-    local top = y + math.floor((index - 1) / columns) * 40
-    local part = widget("option", function()
-      local b = button()
-      if b.label.SetWordWrap then b.label:SetWordWrap(false) end
-      b.setSwitch, b.rail, b.knob, b.switchBorder = W.Switch(b)
-      b.rail:SetPoint("RIGHT", -10, 0)
-      b.state = W.Font(b, "micro")
-      b.state:SetPoint("RIGHT", b.rail, "LEFT", -8, 0)
-      b.radio = W.Glyph(b, "circle_ring.png", 15, W.colors.muted)
-      b.radio:SetPoint("RIGHT", -10, 0)
-      b.dot = W.Glyph(b, "circle.png", 7, W.colors.on)
-      b.dot:SetPoint("CENTER", b.radio, "CENTER")
-      return b
-    end, X + col * (width + GAP), top, width, 34)
-    local checked = row.check and row.check()
-    local radio = row.kind == "radio"
-    local toggle = row.check ~= nil and not radio
-    local rightInset = toggle and -78 or (radio and (checked and -84 or -32) or -12)
-    part.label:ClearAllPoints()
-    part.label:SetPoint("LEFT", part, "LEFT", 12, 0)
-    part.label:SetPoint("RIGHT", part, "RIGHT", rightInset, 0)
-    part.label:SetText(row.label)
-    part.rail:SetShown(toggle); part.knob:SetShown(toggle)
-    if part.switchBorder then part.switchBorder:SetShown(toggle) end
-    part.radio:SetShown(radio)
-    part.dot:SetShown(radio and checked == true)
-    part.state:SetShown(toggle or (radio and checked == true))
-    if radio then
-      W.SetColor(part.radio, unpack(checked and W.colors.on or W.colors.muted))
-      part.state:ClearAllPoints()
-      part.state:SetPoint("RIGHT", part.radio, "LEFT", -8, 0)
-      part.state:SetText(checked and "Selected" or "")
-      part.state:SetTextColor(unpack(checked and W.colors.on or W.colors.muted))
-    elseif toggle then
-      part.setSwitch(checked)
-      part.state:ClearAllPoints()
-      part.state:SetPoint("RIGHT", part.rail, "LEFT", -8, 0)
-      part.state:SetText(checked and "On" or "Off")
-      part.state:SetTextColor(unpack(checked and W.colors.on or W.colors.muted))
-    else
-      part.state:SetText("")
-    end
-    part.isAction = (not radio and not toggle)
-    part.restFill = { .115, .124, .145, .72 }
-    part.restBorder = { 1, 1, 1, .065 }
-    if row.check then
-      part.label:SetTextColor(unpack(W.colors.text))
-    else
-      part.label:SetTextColor(unpack(W.colors.link))
-    end
-    part.tooltip = row.tooltip or function(tip) tip:SetText(row.label) end
-    part.action = function() if row.action then row.action(); draw() end end
-    tint(part, radio and checked == true)
+local function branchFactory()
+  local f = CreateFrame("Frame", nil, content)
+  f:EnableMouse(false)
+  f.v = W.Solid(f, "ARTWORK", 1, 1, 1, .45)
+  f.h = W.Solid(f, "ARTWORK", 1, 1, 1, .45)
+  return f
+end
+
+local function optionFactory()
+  local b = button()
+  if b.SetMotionScriptsWhileDisabled then b:SetMotionScriptsWhileDisabled(true) end
+  if b.label.SetWordWrap then b.label:SetWordWrap(false) end
+  b.setSwitch, b.rail, b.knob, b.switchBorder = W.Switch(b)
+  b.rail:SetPoint("RIGHT", -10, 0)
+  b.state = W.Font(b, "micro")
+  b.state:SetPoint("RIGHT", b.rail, "LEFT", -8, 0)
+  b.radio = W.Glyph(b, "circle_ring.png", 15, W.colors.muted)
+  b.radio:SetPoint("RIGHT", -10, 0)
+  b.dot = W.Glyph(b, "circle.png", 7, W.colors.on)
+  b.dot:SetPoint("CENTER", b.radio, "CENTER")
+  return b
+end
+
+local function placeTile(row, tileX, tileY, tileW)
+  local part = widget("option", optionFactory, tileX, tileY, tileW, 34)
+  part.branch = nil
+  local checked = row.check and row.check()
+  local radio = row.kind == "radio"
+  local toggle = row.check ~= nil and not radio
+  local isDisabled = row.disabled == true
+  local rightInset = toggle and -78 or (radio and (checked and -84 or -32) or -12)
+  part.label:ClearAllPoints()
+  part.label:SetPoint("LEFT", part, "LEFT", 12, 0)
+  part.label:SetPoint("RIGHT", part, "RIGHT", rightInset, 0)
+  part.label:SetText(row.label)
+  part.rail:SetShown(toggle); part.knob:SetShown(toggle)
+  if part.switchBorder then part.switchBorder:SetShown(toggle) end
+  part.radio:SetShown(radio)
+  part.dot:SetShown(radio and checked == true)
+  part.state:SetShown(toggle or (radio and checked == true))
+  if radio then
+    W.SetColor(part.radio, unpack(checked and W.colors.on or W.colors.muted))
+    part.state:ClearAllPoints()
+    part.state:SetPoint("RIGHT", part.radio, "LEFT", -8, 0)
+    part.state:SetText(checked and "Selected" or "")
+    part.state:SetTextColor(unpack(checked and W.colors.on or W.colors.muted))
+  elseif toggle then
+    part.setSwitch(checked)
+    part.state:ClearAllPoints()
+    part.state:SetPoint("RIGHT", part.rail, "LEFT", -8, 0)
+    part.state:SetText(checked and "On" or "Off")
+    part.state:SetTextColor(unpack(checked and W.colors.on or W.colors.muted))
+  else
+    part.state:SetText("")
   end
-  y = y + math.ceil(#rows / columns) * 40 + (#rows > 0 and 4 or 0)
+  part.isAction = (not radio and not toggle)
+  part.restFill = { .115, .124, .145, .72 }
+  part.restBorder = { 1, 1, 1, .065 }
+  if row.check then
+    part.label:SetTextColor(unpack(isDisabled and W.colors.dim or W.colors.text))
+  else
+    part.label:SetTextColor(unpack(isDisabled and W.colors.dim or W.colors.link))
+  end
+  part:SetEnabled(not isDisabled)
+  part:SetAlpha(isDisabled and .45 or 1)
+  part.tooltip = row.tooltip or function(tip) tip:SetText(row.label) end
+  part.action = not isDisabled and function() if row.action then row.action(); draw() end end or nil
+  tint(part, radio and checked == true)
+  return part
+end
+
+-- Tiles: toggles and radio choices in one, two, or more columns.
+-- Consecutive `sub = true` rows stack vertically under their parent toggle with an L-shaped bend connector.
+local SUB_INDENT, STEM_X, TILE_H, ROW_STEP = 22, 10, 34, 40
+
+local function tiles(rows, columns)
+  local groups = {}
+  for _, row in ipairs(rows) do
+    if row.sub == true and #groups > 0 then
+      local g = groups[#groups]
+      g.children[#g.children + 1] = row
+    else
+      groups[#groups + 1] = { row = row, children = {} }
+    end
+  end
+  if not columns then columns = (#groups == 1) and 1 or 2 end
+  local width = columnSize(columns)
+  local bandY = y
+  for bandStart = 1, #groups, columns do
+    local bandHeight = ROW_STEP
+    for col = 0, columns - 1 do
+      local g = groups[bandStart + col]
+      if g then
+        local colX = X + col * (width + GAP)
+        placeTile(g.row, colX, bandY, width)
+        local usedH = ROW_STEP
+        for ci, childRow in ipairs(g.children) do
+          local childTop = bandY + ci * ROW_STEP
+          local childPart = placeTile(childRow, colX + SUB_INDENT, childTop, width - SUB_INDENT)
+          local stemTop = (ci == 1) and (bandY + TILE_H) or (bandY + (ci - 1) * ROW_STEP + 17)
+          local stemH = (childTop + 17 + 1) - stemTop
+          local branch = widget("subBranch", branchFactory, colX, stemTop, SUB_INDENT, stemH)
+          branch.v:ClearAllPoints()
+          branch.v:SetPoint("TOPLEFT", branch, "TOPLEFT", STEM_X, 0)
+          branch.v:SetSize(2, stemH)
+          branch.h:ClearAllPoints()
+          branch.h:SetPoint("BOTTOMLEFT", branch, "BOTTOMLEFT", STEM_X, 0)
+          branch.h:SetSize(SUB_INDENT - STEM_X, 2)
+          local cr, cg, cb, ca
+          if childRow.disabled == true then
+            cr, cg, cb, ca = .56, .62, .70, .45
+          else
+            local checked = childRow.check and childRow.check()
+            cr, cg, cb = W.colors.on[1], W.colors.on[2], W.colors.on[3]
+            ca = checked and .60 or .42
+          end
+          W.SetColor(branch.v, cr, cg, cb, ca)
+          W.SetColor(branch.h, cr, cg, cb, ca)
+          childPart.branch = branch
+          usedH = (ci + 1) * ROW_STEP
+        end
+        if usedH > bandHeight then bandHeight = usedH end
+      end
+    end
+    bandY = bandY + bandHeight
+  end
+  y = bandY + (#groups > 0 and 4 or 0)
 end
 
 local function tipFor(label, text)
@@ -308,9 +382,10 @@ local function tipFor(label, text)
   end
 end
 
-local function range(title, low, high, initial, change, owner, tip)
+local function range(title, low, high, initial, change, owner, tip, isEnabled)
   local slider = widget("slider", function()
     local s = CreateFrame("Slider", nil, content)
+    if s.SetMotionScriptsWhileDisabled then s:SetMotionScriptsWhileDisabled(true) end
     s:SetOrientation("HORIZONTAL")
     local rail = s:CreateTexture(nil, "BACKGROUND")
     rail:SetPoint("LEFT", 7, 0); rail:SetPoint("RIGHT", -7, 0); rail:SetHeight(6)
@@ -389,6 +464,9 @@ local function range(title, low, high, initial, change, owner, tip)
   slider:SetValue(initial)
   slider.lastValue = math.floor((initial or low) + .5)
   slider.label:SetText(title); slider.number:SetText(tostring(slider.lastValue))
+  local active = isEnabled ~= false
+  slider:SetEnabled(active)
+  slider:SetAlpha(active and 1 or .42)
   slider.change = change
   y = y + 58
 end
@@ -473,7 +551,7 @@ end
 local sampleIcons = { "INV_Misc_Map_01", "INV_Misc_Spyglass_03", "INV_Sword_04", "INV_Misc_Book_09", "INV_Misc_Gem_Sapphire_02", "INV_Misc_Bag_10" }
 local styles = { { "fan", "Fan" }, { "grid", "Grid" }, { "line", "Line" } }
 local orderCanvas, drawnView, drawnPage, drawnRevision, refreshFaces
-local launcherTexture = "Interface\\Icons\\INV_Misc_Bag_10"
+local launcherTexture = rtwIcon
 
 local function stopDrag()
   if drag and drag.target then drag.target.dropBorder:Hide() end
@@ -891,6 +969,16 @@ end
 
 -- Draws the options of `spec` that belong on `cardName` (or all of `list`, for search results). Actions are
 -- collected into the card's action row.
+local function optionTip(label, option, isDisabled)
+  local req = isDisabled and option.requires and ("Requires %s."):format(option.requires) or nil
+  if not option.tip and not req then return nil end
+  return function(tip)
+    tip:SetText(label, 1, 1, 1)
+    if option.tip then tip:AddLine(option.tip, nil, nil, nil, true) end
+    if req then tip:AddLine(req, .75, .75, .75, true) end
+  end
+end
+
 local function renderOptions(spec, list, ctx, card, cardName)
   local pending = {}
   local function flush()
@@ -902,7 +990,9 @@ local function renderOptions(spec, list, ctx, card, cardName)
       local label = Options.Label(spec, option, ctx)
       local kind = option.type
       if kind == "toggle" then
-        pending[#pending + 1] = { label = label, kind = "check", tooltip = tipFor(label, option.tip),
+        local disabled = not Options.Enabled(spec, option, ctx)
+        pending[#pending + 1] = { label = label, kind = "check", sub = option.sub == true, disabled = disabled,
+          tooltip = optionTip(label, option, disabled),
           check = function() return Options.Get(spec, option, ctx) == true end,
           action = function() edit(label, function() Options.Set(spec, option, Options.Get(spec, option, ctx) ~= true, ctx) end, owner) end }
       else
@@ -911,22 +1001,29 @@ local function renderOptions(spec, list, ctx, card, cardName)
           directionEditor(spec, option, ctx)
         elseif kind == "choice" then
           subtitle(label)
+          local disabled = not Options.Enabled(spec, option, ctx)
           local rows = {}
           for _, choice in ipairs(Options.Choices(spec, option, ctx)) do
             local value = choice[1]
-            rows[#rows + 1] = { label = choice[2], kind = "radio", tooltip = tipFor(label, option.tip),
+            rows[#rows + 1] = { label = choice[2], kind = "radio", disabled = disabled, tooltip = optionTip(label, option, disabled),
               check = function() return Options.Get(spec, option, ctx) == value end,
               action = function() edit(label, function() Options.Set(spec, option, value, ctx) end, owner) end }
           end
           tiles(rows, #rows >= 3 and #rows ~= 4 and 3 or 2)
         elseif kind == "slider" then
           local value = tonumber(Options.Get(spec, option, ctx)) or option.min
+          local isEnabled = Options.Enabled(spec, option, ctx)
+          local tip = option.tip or Helper.Tip(label)
+          if not isEnabled and option.requires then
+            local req = ("Requires %s."):format(option.requires)
+            tip = tip and (tip .. " " .. req) or req
+          end
           range(label, option.min, option.max, value, function(n)
             Options.Set(spec, option, n, ctx)
             if spec.key == "questKills" and option.key == "size" and questSampleIcons then
               for _, icon in ipairs(questSampleIcons) do icon:SetSize(n, n) end
             end
-          end, owner, option.tip)
+          end, owner, tip, isEnabled)
         elseif kind == "action" then
           local bucket = option.header and card.headerActions or card.actions
           bucket[#bucket + 1] = { label = label, tip = option.tip, danger = option.danger,
@@ -1102,7 +1199,7 @@ local function drawHome()
       if Helper.db[key].enabled and not (key == "minimapFan" and Helper.fanStandsDown) then on = on + 1 end
     end
   end
-  setHeader("INV_Misc_Bag_10", "ReadyToWork", ("Version %s  ·  %d of %d helpers active"):format(Helper.version, on, total))
+  setHeader(rtwIcon, "ReadyToWork", ("Version %s  ·  %d of %d helpers active"):format(Helper.version, on, total))
   enabled:Hide(); moreButton:Hide()
   local columns = WIDTH >= 640 and 3 or 2
   local width = math.floor((WIDTH - (columns - 1) * GAP) / columns)
@@ -1394,7 +1491,7 @@ local function build()
   railDivider = W.Solid(sidebar, "BORDER", cDiv[1], cDiv[2], cDiv[3], cDiv[4] or .065)
   railDivider:SetPoint("TOPRIGHT", 0, -1); railDivider:SetPoint("BOTTOMRIGHT", 0, 1); railDivider:SetWidth(1)
 
-  local brandBadge = W.IconBadge(sidebar, "Interface\\Icons\\INV_Misc_Bag_10", 18, 26)
+  local brandBadge = W.IconBadge(sidebar, rtwIcon, 18, 26)
   brandBadge:SetPoint("TOPLEFT", 14, -14)
   local brand = W.Font(sidebar, "brand")
   brand:SetPoint("LEFT", brandBadge, "RIGHT", 8, 0); brand:SetText("ReadyToWork")
@@ -1414,7 +1511,7 @@ local function build()
 
   tabs = {}
   local navY = 98
-  railEntry("home", "Home", "INV_Misc_Bag_10", navY, false, 30); navY = navY + 34
+  railEntry("home", "Home", rtwIcon, navY, false, 30); navY = navY + 34
   local lastGroup
   for _, key in ipairs(Helper.featureOrder) do
     local spec = Helper.features[key]
@@ -1444,7 +1541,7 @@ local function build()
   heading:SetPoint("TOPLEFT", headerBadge, "TOPRIGHT", 12, -1)
   subheading = W.Font(window, "dim")
   subheading:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -4)
-  subheading:SetPoint("RIGHT", window, "RIGHT", -280, 0)
+  subheading:SetPoint("RIGHT", window, "RIGHT", -195, 0)
   if subheading.SetWordWrap then subheading:SetWordWrap(false) end
   headerLine = W.Solid(window, "BORDER", cDiv[1], cDiv[2], cDiv[3], cDiv[4] or .065)
   headerLine:SetHeight(1)

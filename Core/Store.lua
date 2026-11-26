@@ -257,11 +257,15 @@ local function FindFeature(text)
   if text == "" then return nil end
   for _, key in ipairs(Helper.featureOrder) do
     local spec = Helper.features[key]
-    for _, name in ipairs({ key, spec.command, spec.title, spec.menu }) do
-      if type(name) == "string" and name:lower() == text then return key end
+    if key:lower() == text
+        or (type(spec.command) == "string" and spec.command:lower() == text)
+        or (type(spec.title) == "string" and spec.title:lower() == text)
+        or (type(spec.oldTitle) == "string" and spec.oldTitle:lower() == text)
+        or (type(spec.menu) == "string" and spec.menu:lower() == text) then
+      return key
     end
     for _, alias in ipairs(spec.aliases or {}) do
-      if alias == text then return key end
+      if type(alias) == "string" and alias:lower() == text then return key end
     end
   end
 end

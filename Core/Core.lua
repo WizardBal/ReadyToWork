@@ -17,7 +17,7 @@ do
   local getMeta = C_AddOns and C_AddOns.GetAddOnMetadata
   local ok, version = false, nil
   if type(getMeta) == "function" then ok, version = pcall(getMeta, ADDON, "Version") end
-  Helper.version = ok and type(version) == "string" and version ~= "" and version or "1.57.0"
+  Helper.version = ok and type(version) == "string" and version ~= "" and version or "1.57.1"
 end
 
 local POOR = Enum and Enum.ItemQuality and Enum.ItemQuality.Poor or 0

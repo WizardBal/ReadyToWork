@@ -260,11 +260,11 @@ function Gather.Status()
     if rank then known[#known + 1] = ("%s %d%s"):format(name, rank, bonus ~= 0 and (" (%+d)"):format(bonus) or "") end
   end
   local shown = {}
-  for _, pair in ipairs({ { "herbs", "herbs" }, { "ore", "ore" }, { "corpses", "corpses" }, { "chests", "locked chests" }, { "fishing", "fishing pools" } }) do
+  for _, pair in ipairs({ { "herbs", "herbs" }, { "ore", "ore" }, { "corpses", "corpses" }, { "chests", "chests" }, { "fishing", "fishing" } }) do
     if settings and settings[pair[1]] then shown[#shown + 1] = pair[2] end
   end
   return { #known > 0 and ("Your skills: " .. table.concat(known, " · ")) or "No gathering skill learned yet",
-    #shown > 0 and ("On tooltips of " .. table.concat(shown, ", ")) or "Every kind is switched off" }
+    #shown > 0 and ("Tooltips: " .. table.concat(shown, ", ")) or "Every kind is switched off" }
 end
 
 function Gather.StatusChips()
@@ -308,6 +308,45 @@ local function TooltipLevel(lines)
   end
 end
 
+local function TooltipPrefix(tooltip)
+  local prefix = tooltip and tooltip.GetName and Call(tooltip.GetName, tooltip)
+  if type(prefix) == "string" and prefix ~= "" then return prefix end
+  if tooltip == GameTooltip then return "GameTooltip" end
+end
+
+local function TooltipLineCount(tooltip)
+  local n = tooltip and tooltip.NumLines and Call(tooltip.NumLines, tooltip)
+  return type(n) == "number" and n > 0 and math.min(n, 12) or 6
+end
+
+local function ReadTooltipLines(tooltip)
+  local prefix = TooltipPrefix(tooltip)
+  if not (prefix and _G) then return nil end
+  local out = {}
+  for i = 1, TooltipLineCount(tooltip) do
+    local region = _G[prefix .. "TextLeft" .. i]
+    if region and region.GetText then
+      local text = Call(region.GetText, region)
+      if type(text) == "string" and text ~= "" then
+        out[#out + 1] = { leftText = text }
+      end
+    end
+  end
+  return #out > 0 and out or nil
+end
+
+local function HasLine(tooltip, wanted)
+  local prefix = TooltipPrefix(tooltip)
+  if not (prefix and _G and type(wanted) == "string") then return false end
+  for i = 1, TooltipLineCount(tooltip) do
+    local region = _G[prefix .. "TextLeft" .. i]
+    if region and region.GetText and Call(region.GetText, region) == wanted then
+      return true
+    end
+  end
+  return false
+end
+
 Helper.Feature(function()
   settings = Helper.db.gather
   RefreshSkillCache()
@@ -325,49 +364,59 @@ Helper.Feature(function()
   for _, event in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA" }) do
     Helper.On(event, RefreshZoneCache)
   end
-  if not (Helper.GatherData and TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType) then
-    return
-  end
-  local types = Enum.TooltipDataType
-  TooltipDataProcessor.AddTooltipPostCall(types.Object, function(tooltip, data)
-    if tooltip ~= GameTooltip or not settings.enabled or not Readable(data) or type(data) ~= "table" then return end
-    local lines = Plain(data.lines)
-    local name = type(lines) == "table" and Text(lines[1]) or nil
-    if not name and _G and _G.GameTooltipTextLeft1 and _G.GameTooltipTextLeft1.GetText then
-      name = Call(_G.GameTooltipTextLeft1.GetText, _G.GameTooltipTextLeft1)
-    end
-    local text, color = Gather.ObjectLine(name, data.guid)
-    Add(tooltip, text, color)
-  end)
-  TooltipDataProcessor.AddTooltipPostCall(types.Unit, function(tooltip, data)
-    if tooltip ~= GameTooltip or not settings.enabled or not settings.corpses or not Readable(data) or type(data) ~= "table" then return end
-    local lines = Plain(data.lines)
-    if type(lines) ~= "table" then return end
-    local guid = Plain(data.guid)
-    local unit = type(guid) == "string" and UnitTokenFromGUID and Call(UnitTokenFromGUID, guid) or nil
-    if not unit then
-      local candidate
-      if tooltip.GetUnit then
-        local _, tipUnit = Call(tooltip.GetUnit, tooltip)
-        candidate = tipUnit
+
+  if Helper.GatherData and TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType then
+    local types = Enum.TooltipDataType
+    -- On Forever 1.60.1.71139 (16001), combat marks hovered 3D world-object tooltip text (lines[1].leftText)
+    -- as a secret string (issecretvalue == true, canaccessvalue == false), so Readable/Plain returns nil until combat ends.
+    TooltipDataProcessor.AddTooltipPostCall(types.Object, function(tooltip, data)
+      if tooltip ~= GameTooltip or not settings.enabled then return end
+      local dataOk = Readable(data) and type(data) == "table"
+      local lines = dataOk and Plain(data.lines) or nil
+      local guid = dataOk and Plain(data.guid) or nil
+      local name = type(lines) == "table" and Text(lines[1]) or nil
+      if not name and _G and _G.GameTooltipTextLeft1 and _G.GameTooltipTextLeft1.GetText then
+        name = Call(_G.GameTooltipTextLeft1.GetText, _G.GameTooltipTextLeft1)
       end
-      if type(candidate) ~= "string" or candidate == "" then candidate = "mouseover" end
-      if UnitExists and Call(UnitExists, candidate) then
-        local candGuid = UnitGUID and Call(UnitGUID, candidate)
-        if not (type(guid) == "string" and type(candGuid) == "string" and guid ~= candGuid) then
-          unit = candidate
+      local text, color = Gather.ObjectLine(name, guid)
+      if text and not HasLine(tooltip, text) then
+        Add(tooltip, text, color)
+      end
+    end)
+    TooltipDataProcessor.AddTooltipPostCall(types.Unit, function(tooltip, data)
+      if tooltip ~= GameTooltip or not settings.enabled or not settings.corpses then return end
+      local dataOk = Readable(data) and type(data) == "table"
+      local lines = dataOk and Plain(data.lines) or nil
+      if type(lines) ~= "table" then lines = ReadTooltipLines(tooltip) end
+      if type(lines) ~= "table" then return end
+      local guid = dataOk and Plain(data.guid) or nil
+      local unit = type(guid) == "string" and UnitTokenFromGUID and Call(UnitTokenFromGUID, guid) or nil
+      if not unit then
+        local candidate
+        if tooltip.GetUnit then
+          local _, tipUnit = Call(tooltip.GetUnit, tooltip)
+          candidate = tipUnit
+        end
+        if type(candidate) ~= "string" or candidate == "" then candidate = "mouseover" end
+        if UnitExists and Call(UnitExists, candidate) then
+          local candGuid = UnitGUID and Call(UnitGUID, candidate)
+          if not (type(guid) == "string" and type(candGuid) == "string" and guid ~= candGuid) then
+            unit = candidate
+          end
         end
       end
-    end
-    local dead = unit and UnitIsDead and Call(UnitIsDead, unit)
-    if dead == false then return end
-    local level = unit and UnitLevel and Call(UnitLevel, unit)
-    if type(level) ~= "number" then
-      level = TooltipLevel(lines)
-    end
-    local text, color = Gather.CorpseLine(lines, level)
-    Add(tooltip, text, color)
-  end)
+      local dead = unit and UnitIsDead and Call(UnitIsDead, unit)
+      if dead == false then return end
+      local level = unit and UnitLevel and Call(UnitLevel, unit)
+      if type(level) ~= "number" then
+        level = TooltipLevel(lines)
+      end
+      local text, color = Gather.CorpseLine(lines, level)
+      if text and not HasLine(tooltip, text) then
+        Add(tooltip, text, color)
+      end
+    end)
+  end
 
   Helper.commands.gather = function(rest)
     local word, arg = rest:match("^(%S*)%s*(.-)$")

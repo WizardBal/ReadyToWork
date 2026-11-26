@@ -69,6 +69,12 @@ local function Say(text)
   Helper.Print(text)
 end
 
+local function Report(text)
+  if settings and settings.reportChat then
+    Helper.Print(text)
+  end
+end
+
 local function SpecName(spec)
   return "Spec " .. tostring(spec)
 end
@@ -790,13 +796,14 @@ local function Apply(character, layout, spec, title)
   if touched then
     summary = summary .. " Undo: /rtw bars undo."
   end
-  Say(summary)
+  local speak = stopped and Say or Report
+  speak(summary)
   if #problems > 0 then
     local shown = {}
     for index = 1, math.min(#problems, PROBLEMS_SHOWN) do
       shown[index] = problems[index]
     end
-    Say("Not loaded: " .. table.concat(shown, "; ") ..
+    speak("Not loaded: " .. table.concat(shown, "; ") ..
       (#problems > PROBLEMS_SHOWN and ("; and " .. (#problems - PROBLEMS_SHOWN) .. " more") or "") .. ".")
   end
   return stopped == nil, touched
@@ -850,7 +857,7 @@ function Bars.SaveNew(rawName, forSpec)
   local layout = Snapshot(spec)
   character.profiles[Key(name)] = { name = name, layout = layout }
   MarkLoaded(character, spec, Key(name))
-  Say(('Saved your %s bars as "%s": %s.'):format(SpecName(spec), name, Describe(layout)))
+  Report(('Saved your %s bars as "%s": %s.'):format(SpecName(spec), name, Describe(layout)))
   Changed()
   return true
 end
@@ -1105,7 +1112,7 @@ function Bars.UpdateActive(forSpec, forName, anyway, automatic, quiet)
           local joined = table.concat(warnings, " ")
           if lastAutoWarning[warnKey] ~= joined then
             lastAutoWarning[warnKey] = joined
-            Say(('Auto-update left "%s" as it was: %s Use Update in the bar profile menu to review it.'):format(
+            Report(('Auto-update left "%s" as it was: %s Use Update in the bar profile menu to review it.'):format(
               profile.name, joined))
           end
         end
@@ -1139,10 +1146,10 @@ function Bars.UpdateActive(forSpec, forName, anyway, automatic, quiet)
   -- The profile stays the spec's it was saved in: updated from the other spec, it still holds its own talents.)
   profile.layout = NewLayout(T.Number(layout.spec) and layout.spec or spec, slots)
   MarkLoaded(character, spec, key)
-  Say(('Updated "%s" with your changes to %d slot%s. It now has %s.'):format(profile.name, total,
+  Report(('Updated "%s" with your changes to %d slot%s. It now has %s.'):format(profile.name, total,
     total == 1 and "" or "s", Describe(profile.layout)))
   if note then
-    Say(note)
+    Report(note)
   end
   Changed()
   return true
@@ -1315,7 +1322,7 @@ function Bars.Undo(forSpec)
   local returnTo, returnBase = saved.active, saved.base
   local done, touched = Apply(character, undo, spec, ("Undid the last load on %s"):format(SpecName(spec)))
   if keptCount > 0 then
-    Say(("Kept %d slot%s you changed since that load."):format(keptCount, keptCount == 1 and "" or "s"))
+    Report(("Kept %d slot%s you changed since that load."):format(keptCount, keptCount == 1 and "" or "s"))
   end
   if done then
     -- The profile loaded before, with its record from then: changes made to it before that load still count.
@@ -1379,7 +1386,7 @@ function Bars.Rename(oldName, newName)
     if undo.active == oldKey then undo.active = newKey end
     if type(undo.base) == "table" and undo.base.key == oldKey then undo.base.key = newKey end
   end)
-  Say(('Renamed "%s" to "%s".'):format(oldDisplay, name))
+  Report(('Renamed "%s" to "%s".'):format(oldDisplay, name))
   Changed()
   return true
 end
@@ -1402,7 +1409,7 @@ function Bars.Delete(rawName)
     if undo.active == key then undo.active = nil end
     if type(undo.base) == "table" and undo.base.key == key then undo.base = nil end
   end)
-  Say(('Deleted the profile "%s". Your bars are as they were.'):format(profile.name))
+  Report(('Deleted the profile "%s". Your bars are as they were.'):format(profile.name))
   Changed()
   return true
 end
@@ -1594,10 +1601,14 @@ local function Command(rest, typed)
       Say("The bar profile swap button is " .. (settings.button and "shown (Alt-drag to move it)." or "hidden."))
       Changed()
     end
+  elseif word == "chat" then
+    local what = argument:lower()
+    settings.reportChat = what == "on" or (what ~= "off" and not settings.reportChat)
+    Say(settings.reportChat and "Bar profile chat reports are on." or "Bar profile chat reports are off.")
   else
     Bars.List()
     print("  /rtw bars save Name | load Name | update | rename Old = New | delete Name | undo")
-    print("  /rtw bars button on|off|reset | on|off")
+    print("  /rtw bars button on|off|reset | chat on|off | on|off")
   end
 end
 

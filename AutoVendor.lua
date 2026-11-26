@@ -338,7 +338,9 @@ function Vendor.Repair(byClick)
   if repairBlocked and not byClick then return false end
   local funds = RepairFunds(cost)
   if not funds then
-    Helper.Print(("Repairs cost %s, more than you have, so nothing was repaired."):format(Helper.Money(cost)))
+    if byClick or Helper.db.vendor.reportChat ~= false then
+      Helper.Print(("Repairs cost %s, more than you have, so nothing was repaired."):format(Helper.Money(cost)))
+    end
     return false
   end
   repairCheck = { cost = cost, guild = funds == "guild", visit = generation }
@@ -503,7 +505,7 @@ local function ShowPreview(owner)
     GameTooltip:AddDoubleLine(("%d item%s"):format(count, count == 1 and "" or "s"), Helper.Money(total), .5, .9, .6, .5, .9, .6)
   end
   if loading then GameTooltip:AddLine("Some prices are still loading.", .8, .8, .8) end
-  GameTooltip:AddLine("Paid grey items, and white items you chose. Hold Shift while opening a vendor to skip the automatic sale.", .6, .6, .6, true)
+  GameTooltip:AddLine("Paid gray items, and white items you chose. Hold Shift while opening a vendor to skip the automatic sale.", .6, .6, .6, true)
   GameTooltip:Show()
 end
 Vendor.ShowPreview = ShowPreview
@@ -942,7 +944,7 @@ Helper.Feature(function()
         Helper.Print(settings.repair and "Repairing at vendors is on." or "Repairing at vendors is off.")
       end
     else
-      if not Helper.Toggle(settings, word, "Selling grey items at vendors is") then
+      if not Helper.Toggle(settings, word, "Selling gray items at vendors is") then
         startup = startup + 1
         if session and not session.byClick then
           session.cancelled = true

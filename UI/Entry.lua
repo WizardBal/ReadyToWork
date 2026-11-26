@@ -1,5 +1,5 @@
 -- Ways in from Blizzard's own interface: an entry in the game's Options > AddOns list, and key bindings
--- (Options > Keybindings > AddOns > ReadyToWork, declared in Bindings.xml) for the settings window, the quick
+-- (Options > Keybindings > ReadyToWork, declared in Bindings.xml) for the settings window, the quick
 -- menu, unlock mode and the three Talk & quests switches.
 
 local _, Helper = ...
@@ -29,20 +29,20 @@ end
 
 local category
 
--- Opens the game's key bindings (ReadyToWork's are under AddOns).
+-- Opens the game's key bindings (ReadyToWork's are under ReadyToWork).
 function Helper.OpenKeyBindings()
   local id = Settings and Settings.KEYBINDINGS_CATEGORY_ID
   if id and Settings.OpenToCategory then
     local ok = pcall(Settings.OpenToCategory, id)
     if ok then return end
   end
-  Helper.Print("Key bindings: Game Menu > Options > Keybindings > AddOns > ReadyToWork.")
+  Helper.Print("Key bindings: Game Menu > Options > Keybindings > ReadyToWork.")
 end
 
 local function BuildPanel()
   local panel = CreateFrame("Frame")
   panel:Hide()
-  local icon = W.Icon(panel, "Interface\\Icons\\INV_Misc_Bag_10", 36)
+  local icon = W.Icon(panel, W.MEDIA .. "icon_rtw.png", 36)
   icon:SetPoint("TOPLEFT", 16, -16)
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, -2)

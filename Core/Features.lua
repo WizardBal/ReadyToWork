@@ -185,10 +185,10 @@ Helper.generalTips = {
 -- Bags & Vendors ------------------------------------------------------------------------------------------
 
 Declare{
-  key = "vendor", title = "Vendors", oldTitle = "Auto-sell greys", command = "vendor",
+  key = "vendor", title = "Sell & repair", oldTitle = "Vendors", aliases = { "Auto-sell greys", "Auto-sell grays" }, command = "vendor",
   icon = "INV_Misc_Coin_01", group = "Bags & Vendors", section = true,
-  description = "Repairs, then sells your grey items and white items you choose, when you open a vendor.",
-  rowTip = "Repairs and sells your grey items when a vendor opens. Hold Shift while opening the vendor to skip both once.",
+  description = "Repairs, then sells your gray items and white items you choose, when you open a vendor.",
+  rowTip = "Repairs and sells your gray items when a vendor opens. Hold Shift while opening the vendor to skip both once.",
   -- today: { day, items, copper, repaired } daily summary. included: chosen white items, [item ID] = name.
   -- repair: repair everything at vendors that can; repairGuild: from guild funds when the guild bank allows it.
   -- repairSpent and repairGuildSpent: lifetime totals, the game's repair costs.
@@ -200,18 +200,21 @@ Declare{
     return {
       items > 0 and ("Sold %d item%s for %s today"):format(items, items == 1 and "" or "s", Helper.Money(copper))
         or "Nothing sold today",
-      "Lifetime: " .. Helper.Money(db.lifetime),
+      (db.repair and "Auto-repair on · " or "") .. "Lifetime: " .. Helper.Money(db.lifetime),
     }
   end,
   statusChips = function(db)
     local items, copper, repaired = VendorTotals(db)
     local chips = {
-      { label = "Today sold", value = items > 0 and ("%s (%d)"):format(Helper.Money(copper), items) or "None yet",
+      { label = "Sold today",
+        value = items > 0 and ("%s · %d %s"):format(Helper.Money(copper), items, items == 1 and "item" or "items") or "None yet",
         tone = items > 0 and "accent" or "dim" },
-      { label = "Lifetime", value = Helper.Money(db.lifetime) },
-      { label = "Repairs", value = db.repair and (repaired > 0
-          and ("%s today · %s total"):format(Helper.Money(repaired), Helper.Money(db.repairSpent or 0))
-          or (Helper.Money(db.repairSpent or 0) .. " total")) or "Off",
+      { label = "Sold lifetime", value = Helper.Money(db.lifetime) },
+      { label = "Repairs today",
+        value = db.repair and (repaired > 0 and Helper.Money(repaired) or "None yet") or "Off",
+        tone = (not db.repair or repaired == 0) and "dim" or nil },
+      { label = "Repairs lifetime",
+        value = db.repair and Helper.Money(db.repairSpent or 0) or "Off",
         tone = not db.repair and "dim" or nil },
     }
     local atVendor = MerchantFrame and MerchantFrame:IsShown()
@@ -219,7 +222,7 @@ Declare{
       local _, total, count = Helper.Vendor.Preview()
       chips[#chips + 1] = {
         label = "Ready to sell",
-        value = count > 0 and ("%d (%s)"):format(count, Helper.Money(total)) or "Nothing",
+        value = count > 0 and ("%s · %d %s"):format(Helper.Money(total), count, count == 1 and "item" or "items") or "Nothing",
         tone = count > 0 and "accent" or "dim",
       }
     end
@@ -229,11 +232,13 @@ Declare{
     { type = "toggle", key = "repair", label = "Repair at vendors", cmd = "repair",
       tip = "Repairs all your gear when a vendor that can repair opens. Hold Shift while opening the vendor to skip it once." },
     { type = "toggle", key = "repairGuild", label = "Use guild funds first", cmd = "repair guild",
+      sub = true, requires = "Repair at vendors",
+      enabled = function(db) return db.repair == true end,
       tip = "Pays for repairs from the guild bank when you may withdraw enough; otherwise from your own gold." },
     { type = "toggle", key = "reportChat", label = "Report in chat",
       tip = "Says in chat what was repaired and sold at each vendor visit." },
     { type = "build", label = "Also sell these white items", window = false,
-      tip = "White items in your bags. A ticked item is sold with your greys at every vendor.",
+      tip = "White items in your bags. A ticked item is sold with your grays at every vendor.",
       build = function(root, db, _, _, kit)
         local list = kit.Submenu(root, "Also sell these white items")
         local items = {}
@@ -253,7 +258,7 @@ Declare{
         end
       end },
     { type = "custom", render = "vendorItems", card = "lists", label = "Remembered items",
-      tip = "White items sold with your greys. Drop an item from your bags here, or choose from your bags." },
+      tip = "White items sold with your grays. Drop an item from your bags here, or choose from your bags." },
   },
   capture = function(db)
     local ids = {}
@@ -269,7 +274,7 @@ Declare{
 }
 
 Declare{
-  key = "open", title = "Containers", oldTitle = "Auto-open containers", command = "open",
+  key = "open", title = "Auto-open", oldTitle = "Containers", aliases = { "Auto-open containers", "Open containers" }, command = "open",
   icon = "INV_Box_01", group = "Bags & Vendors", section = true,
   description = "Opens clams and other containers in your bags when it's safe to.",
   -- which: "clams", "common" (white and grey containers) or "all". keepFree: open only with this many bag
@@ -302,7 +307,7 @@ Declare{
   end,
   options = {
     { type = "choice", key = "which", label = "Which containers",
-      tip = "Which containers open by themselves: only clams, white and grey containers, or all of them.",
+      tip = "Which containers open by themselves: only clams, white and gray containers, or all of them.",
       choices = function()
         local labels = Helper.Opener.WhichLabels()
         return { { "clams", labels.clams }, { "common", labels.common }, { "all", labels.all } }
@@ -380,6 +385,8 @@ Declare{
       end,
       set = function(value, _, command) command(value) end },
     { type = "slider", key = "freeSlots", label = "Free bag slots for the destroy button", min = 0, max = 16, menu = false,
+      requires = "Show when: nearly full",
+      enabled = function(db) return db.mode ~= "always" end,
       tip = "With Show when set to nearly full bags: the button appears once this many bag slots or fewer are free.",
       set = function(value, db) db.freeSlots = value; if Helper.Destroy then Helper.Destroy.Refresh() end end },
     { type = "choice", key = "click", label = "On click",
@@ -388,6 +395,8 @@ Declare{
       choices = { { "fan", "Show choices, cheapest first" }, { "destroy", "Destroy the cheapest at once" } },
       set = function(value, _, command) command("click " .. value) end },
     { type = "choice", key = "fanSize", label = "Choices shown", tip = "How many items the destroy button's fan shows at most.",
+      requires = "On click: Show choices",
+      enabled = function(db) return db.click ~= "destroy" end,
       choices = { { 5, "Up to 5" }, { 8, "Up to 8" }, { 12, "Up to 12" } },
       set = function(value, _, command) command("show " .. value) end },
     { type = "toggle", key = "mageFood", label = "Conjured mage food", cmd = "food",
@@ -421,11 +430,11 @@ Declare{
   frames = { barProfiles = "Bar profile swap button" },
   description = "Saved action bar layouts you can swap between, per spec.",
   -- The menu row's switch and the optional swap button (BarSwap.lua). The profiles live in `bars`.
-  defaults = { enabled = true, button = false, direction = "auto" },
+  defaults = { enabled = true, button = false, direction = "auto", reportChat = false },
   -- bars[character] = { name, profiles = { [name key] = { name, layout } }, active = { [spec] = name key },
   -- specs = { [spec] = { base, autoUpdate } } }. Undo of a load is kept for the session only.
   data = { bars = {} },
-  prefs = { "enabled", "button", "direction" },
+  prefs = { "enabled", "button", "direction", "reportChat" },
   -- (every entry is made for the spec you are in when the menu or page is built, and does nothing after a
   -- spec switch)
   context = function()
@@ -476,6 +485,8 @@ Declare{
       tip = "Writes your bar changes into the profile loaded on this spec as you make them.",
       get = function() return Helper.BarLayouts.AutoUpdate() end,
       set = function(value) Helper.BarLayouts.AutoUpdate(value) end },
+    { type = "toggle", key = "reportChat", label = "Report in chat", cmd = "chat",
+      tip = "Says in chat when profiles are loaded, saved, updated, renamed, deleted, or undone." },
     { type = "build", label = "Profiles", window = false,
       build = function(root, _, _, ctx, kit)
         local bars = Bars()
@@ -651,6 +662,71 @@ Declare{
 }
 
 Declare{
+  key = "talk", title = "Talk & quests", command = "talk",
+  icon = "INV_Misc_Note_01", group = "World", section = true,
+  description = "Skips NPC chat, accepts quests and hands them in: three switches, each on its own.",
+  rowTip = "Three separate switches: Skip talk picks an NPC's only chat line page after page; Auto-accept takes offered quests; Auto-turn in hands in finished ones. A strip of buttons on the dialog and quest windows flips them. Hold Shift while you start talking to do it yourself that time.",
+  -- buttons: where the Skip talk / Accept / Turn in strip sits on the dialogue and quest windows.
+  defaults = { enabled = true, skip = false, accept = false, turnIn = false, acceptGrey = true, chat = true, buttons = "top" },
+  prefs = { "enabled", "skip", "accept", "turnIn", "acceptGrey", "chat", "buttons" },
+  status = function()
+    return Helper.Talk and Helper.Talk.Status() or {}
+  end,
+  statusChips = function()
+    return Helper.Talk and Helper.Talk.StatusChips and Helper.Talk.StatusChips() or {}
+  end,
+  options = {
+    { type = "toggle", key = "skip", label = "Skip talk", cmd = "skip",
+      tip = "Picks an NPC's only chat line for you (the speech-bubble icon), page after page, while nothing on the page waits on you: no quest to take, no finished quest to hand in. Vendor, trainer, flight, innkeeper and bank options are never picked." },
+    { type = "toggle", key = "turnIn", label = "Auto-turn in quests", cmd = "turnin",
+      tip = "Hands in finished quests and takes the reward when there is no choice. With a choice of rewards, or a quest that costs gold, the window stays open for you." },
+    { type = "toggle", key = "accept", label = "Auto-accept quests", cmd = "accept",
+      tip = "Automatically takes the quests an NPC offers. A quest that flags you for PvP is left for you." },
+    { type = "toggle", key = "acceptGrey", label = "Include gray quests", cmd = "grey",
+      sub = true, requires = "Auto-accept quests",
+      enabled = function(db) return db.accept == true end,
+      tip = "Also takes quests far below your level (gray in the list) when Auto-accept quests is on. Untick it to leave those for you." },
+    { type = "toggle", key = "chat", label = "Report in chat", cmd = "chat",
+      tip = "A chat line for each quest accepted or handed in, and when a window was left open for you (a reward to choose, a cost, PvP)." },
+    { type = "choice", key = "buttons", label = "Buttons", card = "appearance", cmd = "buttons",
+      tip = "Where the Skip talk, Accept and Turn in buttons sit on the dialog and quest windows.",
+      choices = { { "top", "Above the window" }, { "bottom", "Below the window" }, { "hidden", "Hidden" } } },
+    { type = "note", text = "Hold Shift while you start talking to an NPC to do everything yourself that time. Key bindings for each switch are under Options > Keybindings > ReadyToWork." },
+  },
+  apply = function()
+    if Helper.Talk and Helper.Talk.Refresh then Helper.Talk.Refresh() end
+  end,
+}
+
+Declare{
+  key = "gather", title = "Gather tooltips", oldTitle = "Gathering skill", command = "gather",
+  icon = "Trade_Herbalism", group = "World", section = true,
+  description = "Shows the skill herbs, ore, locked chests, fishing pools and corpses need, on their tooltips.",
+  rowTip = "Hover a herb, ore vein, locked chest, fishing pool or skinnable corpse: its tooltip shows the skill it needs beside yours, colored like a recipe (red: can't yet; orange, yellow, green: skill-up chance; gray: no more skill-ups).",
+  defaults = { enabled = true, herbs = true, ore = true, corpses = true, chests = true, fishing = true },
+  prefs = { "enabled", "herbs", "ore", "corpses", "chests", "fishing" },
+  status = function()
+    return Helper.Gather and Helper.Gather.Status() or {}
+  end,
+  statusChips = function()
+    return Helper.Gather and Helper.Gather.StatusChips and Helper.Gather.StatusChips() or {}
+  end,
+  options = {
+    { type = "toggle", key = "herbs", label = "Herbs", cmd = "herbs",
+      tip = "Herb tooltips show the Herbalism they need, e.g. \"Herbalism 205 · you 190\"." },
+    { type = "toggle", key = "ore", label = "Ore", cmd = "ore",
+      tip = "Ore veins and deposits show the Mining they need." },
+    { type = "toggle", key = "corpses", label = "Corpses", cmd = "corpses",
+      tip = "A corpse the game calls Skinnable (or that needs Herbalism, Mining or Engineering) shows how much skill it needs, worked out from its level." },
+    { type = "toggle", key = "chests", label = "Locked chests", cmd = "chests",
+      tip = "Locked chests and footlockers show the Lockpicking they need. Some chests of one name have different locks: then the range is shown." },
+    { type = "toggle", key = "fishing", label = "Fishing pools", cmd = "fishing",
+      tip = "Fishing pools show the Fishing this zone needs (below it nothing bites) and the skill at which every catch is sure." },
+    { type = "note", text = "Colors work like recipes: red, you can't yet; orange, a skill-up every time; yellow and green, less often; gray, no more skill-ups. For fishing: red, nothing is caught; yellow, some get away; green, every catch is sure." },
+  },
+}
+
+Declare{
   key = "flight", title = "Flight timer", command = "flight",
   icon = "Ability_Mount_Gryphon_01", group = "World", section = true, position = "flight",
   frames = { flight = "Flight timer" },
@@ -684,74 +760,11 @@ Declare{
   end,
 }
 
-Declare{
-  key = "gather", title = "Gathering skill", command = "gather",
-  icon = "Trade_Herbalism", group = "World", section = true,
-  description = "Shows the skill herbs, ore, locked chests, fishing pools and corpses need, on their tooltips.",
-  rowTip = "Hover a herb, ore vein, locked chest, fishing pool or skinnable corpse: its tooltip shows the skill it needs beside yours, colored like a recipe (red: can't yet; orange, yellow, green: skill-up chance; grey: no more skill-ups).",
-  defaults = { enabled = true, herbs = true, ore = true, corpses = true, chests = true, fishing = true },
-  prefs = { "enabled", "herbs", "ore", "corpses", "chests", "fishing" },
-  status = function()
-    return Helper.Gather and Helper.Gather.Status() or {}
-  end,
-  statusChips = function()
-    return Helper.Gather and Helper.Gather.StatusChips and Helper.Gather.StatusChips() or {}
-  end,
-  options = {
-    { type = "toggle", key = "herbs", label = "Herbs", cmd = "herbs",
-      tip = "Herb tooltips show the Herbalism they need, e.g. \"Herbalism 205 · you 190\"." },
-    { type = "toggle", key = "ore", label = "Ore", cmd = "ore",
-      tip = "Ore veins and deposits show the Mining they need." },
-    { type = "toggle", key = "corpses", label = "Corpses", cmd = "corpses",
-      tip = "A corpse the game calls Skinnable (or that needs Herbalism, Mining or Engineering) shows how much skill it needs, worked out from its level." },
-    { type = "toggle", key = "chests", label = "Locked chests", cmd = "chests",
-      tip = "Locked chests and footlockers show the Lockpicking they need. Some chests of one name have different locks: then the range is shown." },
-    { type = "toggle", key = "fishing", label = "Fishing pools", cmd = "fishing",
-      tip = "Fishing pools show the Fishing this zone needs (below it nothing bites) and the skill at which every catch is sure." },
-    { type = "note", text = "Colors work like recipes: red, you can't yet; orange, a skill-up every time; yellow and green, less often; grey, no more skill-ups. For fishing: red, nothing is caught; yellow, some get away; green, every catch is sure." },
-  },
-}
-
-Declare{
-  key = "talk", title = "Talk & quests", command = "talk",
-  icon = "INV_Misc_Note_01", group = "World", section = true,
-  description = "Skips NPC chat, accepts quests and hands them in: three switches, each on its own.",
-  rowTip = "Three separate switches: Skip talk picks an NPC's only chat line page after page; Accept takes offered quests; Turn in hands in finished ones. A strip of buttons on the dialogue and quest windows flips them. Hold Shift while you start talking to do it yourself that time.",
-  -- buttons: where the Skip talk / Accept / Turn in strip sits on the dialogue and quest windows.
-  defaults = { enabled = true, skip = false, accept = false, turnIn = false, acceptGrey = true, chat = true, buttons = "top" },
-  prefs = { "enabled", "skip", "accept", "turnIn", "acceptGrey", "chat", "buttons" },
-  status = function()
-    return Helper.Talk and Helper.Talk.Status() or {}
-  end,
-  statusChips = function()
-    return Helper.Talk and Helper.Talk.StatusChips and Helper.Talk.StatusChips() or {}
-  end,
-  options = {
-    { type = "toggle", key = "skip", label = "Skip talk", cmd = "skip",
-      tip = "Picks an NPC's only chat line for you (the speech-bubble icon), page after page, while nothing on the page waits on you: no quest to take, no finished quest to hand in. Vendor, trainer, flight, innkeeper and bank options are never picked." },
-    { type = "toggle", key = "accept", label = "Accept", cmd = "accept",
-      tip = "Takes the quests an NPC offers. A quest that flags you for PvP is left for you." },
-    { type = "toggle", key = "turnIn", label = "Turn in", cmd = "turnin",
-      tip = "Hands in finished quests and takes the reward when there is no choice. With a choice of rewards, or a quest that costs gold, the window stays open for you." },
-    { type = "toggle", key = "acceptGrey", label = "Accept grey quests", cmd = "grey",
-      tip = "Also takes quests far below your level (grey in the list). Untick it to leave those for you." },
-    { type = "toggle", key = "chat", label = "Report in chat", cmd = "chat",
-      tip = "A chat line for each quest accepted or handed in, and when a window was left open for you (a reward to choose, a cost, PvP)." },
-    { type = "choice", key = "buttons", label = "Buttons", card = "appearance", cmd = "buttons",
-      tip = "Where the Skip talk, Accept and Turn in buttons sit on the dialogue and quest windows.",
-      choices = { { "top", "Above the window" }, { "bottom", "Below the window" }, { "hidden", "Hidden" } } },
-    { type = "note", text = "Hold Shift while you start talking to an NPC to do everything yourself that time. Key bindings for each switch are under Options > Keybindings > AddOns > ReadyToWork." },
-  },
-  apply = function()
-    if Helper.Talk and Helper.Talk.Refresh then Helper.Talk.Refresh() end
-  end,
-}
-
 -- Interface -----------------------------------------------------------------------------------------------
 
 Declare{
-  key = "minimapFan", title = "Minimap & fan", oldTitle = "Minimap fan", command = "fan",
-  icon = "INV_Misc_Bag_10", group = "Interface", section = true,
+  key = "minimapFan", title = "Minimap buttons", oldTitle = "Minimap fan", aliases = { "Minimap & fan" }, command = "fan",
+  icon = "INV_Misc_Spyglass_03", group = "Interface", section = true,
   description = "One minimap button: it fans out your other addons' minimap buttons and opens ReadyToWork.",
   rowTip = "Gathers your addons' minimap buttons behind ReadyToWork's minimap button, which fans them out.",
   -- enabled: collect the minimap buttons into the fan (UI\Launcher.lua, was the addon Minimap Fan).
@@ -779,9 +792,11 @@ Declare{
       tip = "ReadyToWork's minimap button. Hidden, the fan can't open; /rtw settings and the key bindings still work.",
       set = function(value, _, command) command(value and "on" or "off") end },
     { type = "toggle", key = "locked", feature = "minimap", label = "Lock minimap button",
+      sub = true, requires = "Show minimap button",
+      enabled = function(db) return db.enabled ~= false end,
       tip = "Stops the minimap button from being dragged around the minimap." },
     { type = "action", label = "Customize fan…", tip = "Opens the fan's layout and button order in the settings window.", window = false,
-      run = function() Helper.OpenSettings("Minimap & fan") end },
+      run = function() Helper.OpenSettings("Minimap buttons") end },
     { type = "toggle", key = "autoClose", label = "Auto-close", tip = "Closes the fan shortly after the pointer leaves it.",
       set = function(value, db, command) if db.autoClose ~= value then command("autoclose") end end },
     Word("Reset position", "reset", "Puts the minimap button back where it started on the minimap.", { name = "Reset fan position", card = "appearance" }),
@@ -815,7 +830,7 @@ Declare{
   status = function()
     local count = 0
     for _ in pairs(Helper.Frames and Helper.Frames.Movable() or {}) do count = count + 1 end
-    return { ("%d movable frames"):format(count), "Key bindings under AddOns > ReadyToWork" }
+    return { ("%d movable frames"):format(count), "Key bindings under Options > Keybindings > ReadyToWork" }
   end,
   statusChips = function()
     local count = 0
@@ -827,7 +842,7 @@ Declare{
   options = {
     { type = "note", text = "Unlock frames outlines every RTW frame so you can drag to move, scroll to resize, or right-click to reset. Alt-drag also moves any frame anytime." },
     { type = "action", label = "Unlock frames", run = function() Helper.commands.unlock() end },
-    { type = "action", label = "Key bindings", tip = "Opens the game's key bindings, where ReadyToWork's are under AddOns.",
+    { type = "action", label = "Key bindings", tip = "Opens the game's key bindings, where ReadyToWork's are under ReadyToWork.",
       run = function() if Helper.OpenKeyBindings then Helper.OpenKeyBindings() end end },
     { type = "action", label = "Introduction", run = function() if Helper.ShowIntro then Helper.ShowIntro() end end },
     { type = "action", label = "Reset positions", danger = true, run = function() Helper.ResetPositions() end },

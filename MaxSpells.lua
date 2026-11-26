@@ -313,7 +313,7 @@ local function GamePushOn()
     if ok and not Secret(value) and type(value) == "string" then return value ~= "0" end
 end
 
-local function ApplyGamePush()
+local function ApplyGamePush(explicit)
     local wantOn = not db.blockGamePush
     local now = GamePushOn()
     if now == nil or now == wantOn then return end
@@ -324,9 +324,11 @@ local function ApplyGamePush()
     local ok, done = pcall(set, PUSH_CVAR, wantOn and "1" or "0")
     settingPush = false
     if ok and done ~= false and GamePushOn() == wantOn then
-        Say(wantOn and "The game puts newly learned spells on your bars again (its own setting)." or
-            "ReadyToWork switched off the game's own pushing of spells onto your bars (it put a spec's spells back after " ..
-            "every spec switch). ReadyToWork still places spells you've never had. To let the game do it again: /rtw spells gamepush on.")
+        if explicit or db.reportChanges then
+            Say(wantOn and "The game puts newly learned spells on your bars again (its own setting)." or
+                "ReadyToWork switched off the game's own pushing of spells onto your bars (it put a spec's spells back after " ..
+                "every spec switch). ReadyToWork still places spells you've never had. To let the game do it again: /rtw spells gamepush on.")
+        end
     else
         Warn("gamepush", "Couldn't change the game's own setting for putting spells on your bars (" .. PUSH_CVAR .. ").")
     end
@@ -606,7 +608,10 @@ local function ProcessLearned()
                     if reason then stats.status = reason end
                     if not changed and blocked then break end
                 else
-                    Say("No empty slot on the visible action bars for " .. Literal(entry.name) .. ".")
+                    if db.reportChanges then
+                        Say("No empty slot on the visible action bars for " .. Literal(entry.name) .. ".")
+                    end
+                    NotPlaced(queued.id, "no empty slot on the visible action bars")
                 end
             end
         end
@@ -776,7 +781,7 @@ local function Command(message)
         if argument == "on" or argument == "off" then db.blockGamePush = argument == "off"
         elseif argument == "" or argument == "toggle" then db.blockGamePush = not db.blockGamePush
         else Say("Use /rtw spells gamepush on (the game puts new spells on your bars) or off (ReadyToWork keeps it off)."); return end
-        ApplyGamePush()
+        ApplyGamePush(true)
         if pushWaiting then Say("The game's setting changes when the fight ends.") end
     elseif command == "debug" or command == "status" then Debug()
     elseif command == "options" or command == "config" or command == "minimap" then

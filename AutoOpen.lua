@@ -26,7 +26,7 @@ local CLAMS = {
   [5523] = true, [5524] = true, [7973] = true, [15874] = true,     -- Small Barnacled, Thick-shelled, Big-mouth, Soft-shelled
   [24476] = true, [36781] = true, [44700] = true, [45909] = true, [52340] = true,
 }
-local WHICH = { clams = "Clams only", common = "White and grey containers", all = "Any container" }
+local WHICH = { clams = "Clams only", common = "White and gray containers", all = "Any container" }
 
 local settings
 local busy = {}           -- what's pausing it: interaction types, "trade", "loot"
