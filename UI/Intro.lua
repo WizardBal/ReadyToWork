@@ -10,6 +10,7 @@ local W = Helper.Widgets
 local SHOW_DELAY = 3          -- seconds after login, once the login chat has settled
 local WIDTH, LINE_HEIGHT = 790, 28
 local RELEASE_NOTES = {
+  ["1.57.2"] = "What's new: Bar profiles and Quick destroy swap buttons now dismiss their tooltip when the fan opens and anchor tooltips away from screen edges and fan tiles.",
   ["1.57.1"] = "What's new: Custom Orc Peon icon, indented parent/child switches, Bar profiles chat toggle (off by default), and a dedicated ReadyToWork keybindings category.",
   ["1.57.0"] = "What's new: Intro now appears once after each update (keeping your settings), bar auto-update stays quiet on login, and release packaging is ready.",
 }

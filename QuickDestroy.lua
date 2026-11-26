@@ -341,8 +341,20 @@ local function ShortMoney(copper)
   return math.floor(copper / 10000) .. "g" .. (silver > 0 and (" " .. silver .. "s") or "")
 end
 
-local function ShowItemTooltip(owner, item, lines)
-  GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
+local function TooltipAnchor(owner, horizontalFan)
+  local x, y
+  if owner and owner.GetCenter then
+    x, y = owner:GetCenter()
+  end
+  local w, h = UIParent and UIParent.GetWidth and UIParent:GetWidth(), UIParent and UIParent.GetHeight and UIParent:GetHeight()
+  if horizontalFan then
+    return (y and h and y > h / 2) and "ANCHOR_BOTTOM" or "ANCHOR_TOP"
+  end
+  return (x and w and x < w / 2) and "ANCHOR_RIGHT" or "ANCHOR_LEFT"
+end
+
+local function ShowItemTooltip(owner, item, lines, anchor)
+  GameTooltip:SetOwner(owner, anchor or TooltipAnchor(owner, false))
   if not (GameTooltip.SetBagItem and pcall(GameTooltip.SetBagItem, GameTooltip, item.bag, item.slot)) then
     GameTooltip:SetText(item.link or "Item")
   end
@@ -371,6 +383,8 @@ local function SetSlotBorder(slot, isGrey)
     slot.Border:SetColorTexture(isGrey and 0.45 or 0.9, isGrey and 0.45 or 0.9, isGrey and 0.45 or 0.9, 0.95)
   end
 end
+
+local FanStep
 
 local function SlotFor(index)
   local slot = slots[index]
@@ -436,11 +450,16 @@ local function SlotFor(index)
           and "This conjured item has no vendor value."
         or (self.item.value == 0 and "This item has no vendor value."
           or ("The stack sells for %s."):format(Helper.Money(self.item.value)))
+      local shown = 0
+      for _, s in ipairs(slots) do
+        if s.item then shown = shown + 1 end
+      end
+      local stepX = FanStep(shown)
       ShowItemTooltip(self, self.item, {
         { ClickHint(self.item), 1, 0.3, 0.3 },
         { valueLine, 1, 1, 1 },
         { "Right-click: never offer this item again.", 0.6, 0.6, 0.6 },
-      })
+      }, TooltipAnchor(self, stepX ~= 0))
     end
   end)
   slot:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -450,7 +469,7 @@ end
 
 -- Which way the row runs: away from the nearer side of the screen, or up or
 -- down when there is no room sideways. Returns the step between slots.
-local function FanStep(count)
+FanStep = function(count)
   local dir=settings.direction
   if dir=="left" then return -PITCH_ACROSS,0 elseif dir=="right" then return PITCH_ACROSS,0 elseif dir=="up" then return 0,PITCH_UP elseif dir=="down" then return 0,-PITCH_UP end
   local x, y = button:GetCenter()
@@ -501,7 +520,7 @@ local function FillFan()
     slot.Count:SetText(item.total or (item.count > 1 and item.count or ""))
     local rank = MAGE_WATER[item.itemID] or MAGE_FOOD[item.itemID]
     slot.Value:SetText(rank and ("Rank " .. rank) or ShortMoney(item.value))
-    if slot.ValueBg then
+    if slot.styled and slot.ValueBg then
       slot.ValueBg:SetWidth(math.max(30, (slot.Value:GetStringWidth() or 24) + 10))
     end
     SetSlotBorder(slot, item.grey)
@@ -528,6 +547,9 @@ function Destroy.CloseFan()
   fanOpen = false
   fan:Hide()
   for _, slot in ipairs(slots) do
+    if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(slot) then
+      GameTooltip:Hide()
+    end
     slot.item = nil
     slot:Hide()
   end
@@ -537,6 +559,9 @@ end
 function Destroy.OpenFan()
   if fanOpen or not button or not button:IsShown() then
     return
+  end
+  if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(button) then
+    GameTooltip:Hide()
   end
   fanOpen = true
   openedAt, awaySince = GetTime(), nil
@@ -752,6 +777,9 @@ local function BuildButton()
     end
   end)
   button:SetScript("OnEnter", function(self)
+    if fanOpen and (not GetCursorInfo or GetCursorInfo() == nil) then
+      return
+    end
     if target and not target.included and settings.click == "destroy" then
       ShowItemTooltip(self, target, {
         { ClickHint(target), 1, 0.3, 0.3 },
@@ -759,9 +787,9 @@ local function BuildButton()
         { DROP_HINT, 0.6, 0.6, 0.6 },
         { "Right-click: settings.", 0.6, 0.6, 0.6 },
         { "Alt-drag: move this button.", 0.6, 0.6, 0.6 },
-      })
+      }, TooltipAnchor(self, false))
     else
-      GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+      GameTooltip:SetOwner(self, TooltipAnchor(self, false))
       GameTooltip:SetText("Destroy button")
       GameTooltip:AddLine(DROP_HINT, 1, 1, 1, true)
       if target then

@@ -2,7 +2,7 @@
 ## Title: ReadyToWork
 ## Notes: Private quest markers, automatic junk selling, opening clams and other containers, flight timers, the skill herbs, ore, chests and fishing pools need on their tooltips, skipping NPC chat and accepting or handing in quests (each on its own switch), quick bag cleanup, action bars kept on your highest spell ranks, and named action bar profiles you can swap between, plus one minimap button that fans out your other addons' buttons. Formerly BalHelper and Minimap Fan.
 ## Author: Bal
-## Version: 1.57.1
+## Version: 1.57.2
 ## SavedVariables: ReadyToWorkDB
 ## SavedVariablesPerCharacter: ReadyToWorkTravel
 ## IconTexture: Interface\AddOns\ReadyToWork\Media\icon_rtw.png

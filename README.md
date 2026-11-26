@@ -1,6 +1,6 @@
 # ReadyToWork
 
-Quality-of-life helpers for **World of Warcraft: Forever** (`v1.57.1`).
+Quality-of-life helpers for **World of Warcraft: Forever** (`v1.57.2`).
 
 Formerly **BalHelper** and **Minimap Fan** — your settings for both carry over automatically, and `/bh`, `/balhelper`, `/minifan`, and `/mmfan` still work alongside `/rtw` and `/readytowork`.
 

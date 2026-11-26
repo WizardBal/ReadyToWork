@@ -219,12 +219,25 @@ local function Direction()
   return 1
 end
 
+local function TooltipAnchor(owner, horizontalFan)
+  local x, y
+  if owner and owner.GetCenter then
+    x, y = owner:GetCenter()
+  end
+  local w, h = UIParent and UIParent.GetWidth and UIParent:GetWidth(), UIParent and UIParent.GetHeight and UIParent:GetHeight()
+  if horizontalFan then
+    return (y and h and y > h / 2) and "ANCHOR_BOTTOM" or "ANCHOR_TOP"
+  end
+  return (x and w and x < w / 2) and "ANCHOR_RIGHT" or "ANCHOR_LEFT"
+end
+
 local function ShowTileTooltip(tile)
   local entry = tile.entry
   if not entry then
     return
   end
-  GameTooltip:SetOwner(tile, "ANCHOR_RIGHT")
+  local horiz = settings.direction == "left" or settings.direction == "right"
+  GameTooltip:SetOwner(tile, TooltipAnchor(tile, horiz))
   if entry.more then
     GameTooltip:SetText("More profiles")
     GameTooltip:AddLine(("Click: show page %d of %d."):format(entry.page % entry.pages + 1, entry.pages), 1, 1, 1, true)
@@ -425,6 +438,9 @@ function UI.CloseFan()
   fanOpen = false
   fan:Hide()
   for _, tile in ipairs(tiles) do
+    if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(tile) then
+      GameTooltip:Hide()
+    end
     tile.entry = nil
     tile:Hide()
   end
@@ -433,6 +449,9 @@ end
 function UI.OpenFan()
   if fanOpen or not button or not button:IsShown() then
     return
+  end
+  if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(button) then
+    GameTooltip:Hide()
   end
   fanOpen = true
   openedAt, awaySince = GetTime(), nil
@@ -467,9 +486,12 @@ local function FanUpdate()
 end
 
 local function ShowButtonTooltip(self)
+  if fanOpen then
+    return
+  end
   local spec = Bars.ActiveSpec()
   local name = spec and Bars.ActiveName(spec)
-  GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+  GameTooltip:SetOwner(self, TooltipAnchor(self, false))
   GameTooltip:SetText("Bar profiles")
   if name then
     GameTooltip:AddLine(("On %s: %s"):format(Bars.SpecName(spec), name), 1, 1, 1, true)
@@ -533,6 +555,9 @@ local function BuildButton()
       return -- Alt is for dragging
     end
     if mouse == "RightButton" then
+      if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(button) then
+        GameTooltip:Hide()
+      end
       UI.CloseFan()
       Helper.OpenFeatureSettings("Bar profiles")
     elseif fanOpen then

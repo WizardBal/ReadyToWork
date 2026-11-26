@@ -1,5 +1,11 @@
 # ReadyToWork Changelog
 
+## 1.57.2 (2026-11-26): Clean fan button tooltips
+
+- **Bar profiles & Quick destroy buttons:**
+  - Opening the fan immediately dismisses the main button's tooltip and suppresses it while the fan stays open (and right-clicking hides it before opening Settings; closing the fan hides any open tile tooltip).
+  - Main-button and fan-tile tooltips now anchor toward the interior of the screen and away from the fan axis (`ANCHOR_LEFT` / `ANCHOR_RIGHT` on vertical fans; `ANCHOR_TOP` / `ANCHOR_BOTTOM` on horizontal fans) so the buttons can sit anywhere on screen cleanly.
+
 ## 1.57.1 (2026-11-25): Custom Orc Peon icon, UI hierarchy, chat toggles & keybindings
 
 - **Custom branding & icons:**
