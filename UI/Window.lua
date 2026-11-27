@@ -939,7 +939,10 @@ local function markerExample()
   panel.bar:SetSize(128, 18); panel.bar:SetPoint("CENTER", 0, -12)
   panel.name = W.Font(panel, "small"); panel.name:SetPoint("CENTER", panel.bar)
   panel.name:SetTextColor(1, 1, 1, 1)
-  panel.icon = panel:CreateTexture(nil, "OVERLAY")
+  panel.icon = panel:CreateTexture(nil, "ARTWORK")
+  if Helper.QuestMarkers and Helper.QuestMarkers.attachBadge then
+    Helper.QuestMarkers.attachBadge(panel, panel.icon)
+  end
   return panel
 end
 
@@ -959,8 +962,16 @@ editors.questSamples = function()
     if db.placement == "above" then panel.icon:SetPoint("BOTTOM", panel.bar, "TOP", 0, 3)
     elseif db.placement == "right" then panel.icon:SetPoint("LEFT", panel.bar, "RIGHT", 5, 0)
     else panel.icon:SetPoint("RIGHT", panel.bar, "LEFT", -5, 0) end
-    panel.icon:SetSize(db.size or 22, db.size or 22)
-    questSampleIcons[i] = panel.icon
+    local size = db.size or 22
+    panel.icon:SetSize(size, size)
+    local sampleCount = i == 1 and 4 or 2
+    if Helper.QuestMarkers and Helper.QuestMarkers.updateBadge then
+      if not panel.countBg and Helper.QuestMarkers.attachBadge then
+        Helper.QuestMarkers.attachBadge(panel, panel.icon)
+      end
+      Helper.QuestMarkers.updateBadge(panel, sampleCount, size, db.showCount ~= false)
+    end
+    questSampleIcons[i] = { icon = panel.icon, panel = panel, sampleCount = sampleCount }
   end
   y = y + 100
 end
@@ -1021,7 +1032,13 @@ local function renderOptions(spec, list, ctx, card, cardName)
           range(label, option.min, option.max, value, function(n)
             Options.Set(spec, option, n, ctx)
             if spec.key == "questKills" and option.key == "size" and questSampleIcons then
-              for _, icon in ipairs(questSampleIcons) do icon:SetSize(n, n) end
+              local showCount = Helper.db.questKills.showCount ~= false
+              for _, sample in ipairs(questSampleIcons) do
+                sample.icon:SetSize(n, n)
+                if Helper.QuestMarkers and Helper.QuestMarkers.updateBadge and sample.panel then
+                  Helper.QuestMarkers.updateBadge(sample.panel, sample.sampleCount, n, showCount)
+                end
+              end
             end
           end, owner, tip, isEnabled)
         elseif kind == "action" then

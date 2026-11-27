@@ -616,11 +616,11 @@ Declare{
   rowTip = "Marks nearby quest health bars, your selected target, and the distant quest creature under your pointer when its nameplate is available.",
   -- partyGuesses: in a group, also mark quest mobs the game won't tie to a quest (they may be a party member's).
   defaults = {
-    enabled = true, kills = true, loot = true, targetOnly = false,
+    enabled = true, kills = true, loot = true, showCount = true, targetOnly = false,
     killIcon = "sword", lootIcon = "bag", size = 22, placement = "above",
     partyGuesses = false, cursorHover = true,
   },
-  prefs = { "enabled", "kills", "loot", "targetOnly", "cursorHover", "partyGuesses", "killIcon", "lootIcon", "size",
+  prefs = { "enabled", "kills", "loot", "showCount", "targetOnly", "cursorHover", "partyGuesses", "killIcon", "lootIcon", "size",
     "placement" },
   status = function(db)
     local marks = (db.kills and db.loot) and "kill and loot objectives" or db.kills and "kill objectives" or db.loot and "loot sources" or "nothing"
@@ -638,6 +638,8 @@ Declare{
   options = {
     { type = "toggle", key = "kills", label = "Kill objectives", tip = "Marks mobs you still need to kill for a quest." },
     { type = "toggle", key = "loot", label = "Loot sources", tip = "Marks mobs that drop items your quests still need." },
+    { type = "toggle", key = "showCount", label = "Remaining count",
+      tip = "Shows a high-contrast badge on each marker with how many kills or loot items you still need." },
     { type = "toggle", key = "cursorHover", label = "Distant hover icon at cursor",
       tip = "Shows the quest icon above your pointer while hovering a distant, unselected creature." },
     { type = "toggle", key = "targetOnly", label = "Target only", tip = "Restricts quest icons to the currently selected creature." },

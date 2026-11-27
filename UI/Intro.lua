@@ -10,6 +10,7 @@ local W = Helper.Widgets
 local SHOW_DELAY = 3          -- seconds after login, once the login chat has settled
 local WIDTH, LINE_HEIGHT = 790, 28
 local RELEASE_NOTES = {
+  ["1.58.0"] = "What's new: Sell items (#) now sells all eligible items in one click, Quest markers show a high-contrast remaining count badge, and Flight timer adds Mount Hyjal & Riverglades routes plus clearer untimed tooltips.",
   ["1.57.3"] = "What's new: Fixed the Intro window's 'Don't show automatically on future updates' checkbox so it visually checks and saves reliably, and added a top-right close button.",
   ["1.57.2"] = "What's new: Bar profiles and Quick destroy swap buttons now dismiss their tooltip when the fan opens and anchor tooltips away from screen edges and fan tiles.",
   ["1.57.1"] = "What's new: Custom Orc Peon icon, indented parent/child switches, Bar profiles chat toggle (off by default), and a dedicated ReadyToWork keybindings category.",

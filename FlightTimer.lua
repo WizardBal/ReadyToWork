@@ -337,7 +337,7 @@ function Flight.Describe(current, elapsed)
   local title = current.to and ("To " .. current.to) or "In flight"
   if not current.expected then
     -- Nothing to count down from yet: show how long it has been.
-    return title, Helper.Clock(elapsed), nil, current.to and "timing this route" or nil
+    return title, Helper.Clock(elapsed), nil, current.to and "learning route" or nil
   end
   local left = current.expected - elapsed
   local text
@@ -598,7 +598,7 @@ Helper.Feature(function()
     if not reachable and Call(TaxiNodeGetType,slot) ~= "REACHABLE" then return end
     local from,to,origin=RouteEndpoints(slot)
     local seconds,exact=Flight.Expected(from,to,RouteLength(slot),Continent(),RouteDetails(from,to,origin,slot))
-    GameTooltip:AddLine(seconds and ((exact and "Flight time: " or "Estimated flight: ")..Flight.Duration(seconds)) or "Flight time unknown",0.65,0.85,1)
+    GameTooltip:AddLine(seconds and ((exact and "Flight time: " or "Estimated flight: ")..Flight.Duration(seconds)) or "Flight time not recorded yet (learns on first flight)",0.65,0.85,1)
     GameTooltip:Show()
   end
   local function attachPins()

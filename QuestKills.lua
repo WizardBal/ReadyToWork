@@ -109,8 +109,12 @@ local indexSignature
 local function Signature(byID)
   local parts = {}
   for id, labels in pairs(byID) do
-    for label, kind in pairs(labels) do
-      parts[#parts + 1] = id .. ":" .. label .. "=" .. tostring(kind)
+    for label, entry in pairs(labels) do
+      if entry then
+        parts[#parts + 1] = id .. ":" .. label .. "=" .. tostring(entry.kind) .. ":" .. tostring(entry.remaining or 0)
+      else
+        parts[#parts + 1] = id .. ":" .. label .. "=false"
+      end
     end
   end
   table.sort(parts)
@@ -137,21 +141,34 @@ local function IndexObjectives()
             local labels = {}
             for _, objective in ipairs(objectives) do
               if Readable(objective) and type(objective) == "table" then
-                local label = ObjectiveLabel(objective.text)
+                local label, textHave, textNeed = ObjectiveLabel(objective.text)
                 if label then
                   local kind = Public(objective.type)
+                  local have, need = Public(objective.numFulfilled), Public(objective.numRequired)
+                  if type(have) ~= "number" or type(need) ~= "number" then
+                    have, need = textHave, textNeed
+                  end
                   local unfinished = (kind == "monster" or kind == "item")
                     and Public(objective.finished) == false
-                    and IsUnfinished(Public(objective.numFulfilled), Public(objective.numRequired))
+                    and IsUnfinished(have, need)
+                  local remaining = unfinished and type(have) == "number" and type(need) == "number"
+                    and need > have and (need - have) or nil
                   -- (two objectives with the same text: an unfinished one wins, a finished one never overwrites it)
-                  if not labels[label] then
-                    labels[label] = unfinished and kind or false
+                  if unfinished then
+                    local existing = labels[label]
+                    if not existing then
+                      labels[label] = { kind = kind, remaining = remaining }
+                    elseif remaining and (not existing.remaining or remaining > existing.remaining) then
+                      existing.remaining = remaining
+                    end
+                  elseif labels[label] == nil then
+                    labels[label] = false
                   end
                 end
               end
             end
-            for _, kind in pairs(labels) do
-              if kind then
+            for _, entry in pairs(labels) do
+              if entry then
                 questByID[id] = labels
                 break
               end
@@ -186,17 +203,29 @@ end
 -- unfinished objectives decide. A quest with only loot left marks a loot source, only kills a kill target;
 -- with both, a loot source (the mob is in the quest either way).
 local function KindOfQuests(quests)
-  local item, monster = false, false
+  local itemCount, itemRem, monsterCount, monsterRem = 0, nil, 0, nil
+  local seen = {}
   for _, labels in ipairs(quests) do
-    for _, kind in pairs(labels) do
-      if kind == "item" then item = true elseif kind == "monster" then monster = true end
+    if not seen[labels] then
+      seen[labels] = true
+      for _, entry in pairs(labels) do
+        if entry then
+          if entry.kind == "item" then
+            itemCount = itemCount + 1
+            itemRem = itemCount == 1 and entry.remaining or nil
+          elseif entry.kind == "monster" then
+            monsterCount = monsterCount + 1
+            monsterRem = monsterCount == 1 and entry.remaining or nil
+          end
+        end
+      end
     end
   end
-  if item and settings.loot then
-    return "item"
+  if itemCount > 0 and settings.loot then
+    return "item", itemRem
   end
-  if monster and settings.kills then
-    return "monster"
+  if monsterCount > 0 and settings.kills then
+    return "monster", monsterRem
   end
 end
 
@@ -204,8 +233,15 @@ end
 local function AllLabels()
   local all = {}
   for _, labels in pairs(questByID) do
-    for label, kind in pairs(labels) do
-      if kind and all[label] == nil then all[label] = kind end
+    for label, entry in pairs(labels) do
+      if entry then
+        local existing = all[label]
+        if not existing then
+          all[label] = { kind = entry.kind, remaining = entry.remaining }
+        elseif entry.remaining and (not existing.remaining or entry.remaining > existing.remaining) then
+          existing.remaining = entry.remaining
+        end
+      end
     end
   end
   return all
@@ -229,7 +265,8 @@ local function MatchTooltip(data)
   if type(lines) ~= "table" then
     return nil, "WoW did not expose readable tooltip lines."
   end
-  local labels, loot, sawQuest, hidden, unnamedQuest, readableObjective
+  local labels, sawQuest, hidden, unnamedQuest, readableObjective
+  local sawKill, killRemaining, sawLoot, lootRemaining
   local named = {}   -- quests of yours the tooltip names
   local shown = {}   -- what the tooltip showed, for the log when nothing matches
   for _, line in ipairs(lines) do
@@ -267,25 +304,31 @@ local function MatchTooltip(data)
       if #shown < 6 then
         shown[#shown + 1] = "objective " .. (label and ('"' .. label .. '"') or "hidden")
       end
-      local kind = label and labels[label]
+      local entry = label and labels[label]
+      local kind = entry and entry.kind
+      local rem = entry and entry.remaining
       if kind == "monster" and settings.kills then
-        return kind
-      end
-      if kind == "item" and settings.loot then
-        loot = true
+        sawKill = true
+        if rem and (not killRemaining or rem > killRemaining) then killRemaining = rem end
+      elseif kind == "item" and settings.loot then
+        sawLoot = true
+        if rem and (not lootRemaining or rem > lootRemaining) then lootRemaining = rem end
       end
     end
   end
-  if loot then
-    return "item"
+  if sawKill then
+    return "monster", nil, nil, killRemaining
+  end
+  if sawLoot then
+    return "item", nil, nil, lootRemaining
   end
   local detail = #shown > 0 and ("its tooltip showed: " .. table.concat(shown, ", ")) or nil
   if hidden or unnamedQuest then
     -- A quest of yours the game named, with what it says under it hidden: that quest's own unfinished
     -- objectives decide.
-    local kind = KindOfQuests(named)
+    local kind, rem = KindOfQuests(named)
     if kind then
-      return kind, "hidden"
+      return kind, "hidden", nil, rem
     end
     -- A quest line nobody can identify and nothing readable under it: still a quest mob.
     if unnamedQuest and not readableObjective then
@@ -323,26 +366,37 @@ end
 
 local function GuessKind(unit, strict)
   local name = NameKey(Read(UnitName, unit))
-  local item, monster = false, false
+  local itemCount, itemRem, monsterCount, monsterRem = 0, nil, 0, nil
+  local matchedName, matchedRem = false, nil
   for _, labels in pairs(questByID) do
-    for label, kind in pairs(labels) do
-      if kind == "monster" then
-        monster = true
-        if name and NamesMob(label, name) then
-          return settings.kills and "monster" or false, SWITCHED_OFF
+    for label, entry in pairs(labels) do
+      if entry then
+        if entry.kind == "monster" then
+          monsterCount = monsterCount + 1
+          monsterRem = monsterCount == 1 and entry.remaining or nil
+          if name and NamesMob(label, name) then
+            matchedName = true
+            if entry.remaining and (not matchedRem or entry.remaining > matchedRem) then
+              matchedRem = entry.remaining
+            end
+          end
+        elseif entry.kind == "item" then
+          itemCount = itemCount + 1
+          itemRem = itemCount == 1 and entry.remaining or nil
         end
-      elseif kind == "item" then
-        item = true
       end
     end
+  end
+  if matchedName then
+    return settings.kills and "monster" or false, SWITCHED_OFF, matchedRem
   end
   if strict then
     return false, PARTY_UNSURE
   end
-  if item then
-    return settings.loot and "item" or false, SWITCHED_OFF
+  if itemCount > 0 then
+    return settings.loot and "item" or false, SWITCHED_OFF, itemRem
   end
-  return monster and settings.kills and "monster" or false, SWITCHED_OFF
+  return monsterCount > 0 and settings.kills and "monster" or false, SWITCHED_OFF, monsterRem
 end
 
 -- Guessing is only safe alone: in a group a quest mob may be a party member's.
@@ -378,15 +432,15 @@ local function NeededObjective(unit, tooltipData)
 
   -- The tooltip identifies the exact active quest and objective. The generic
   -- quest-unit flag is not required, since some quest loot sources lack it.
-  local kind, reason, detail = MatchUnitTooltip(unit,tooltipData)
+  local kind, reason, detail, remaining = MatchUnitTooltip(unit, tooltipData)
   if kind then
-    return kind, reason
+    return kind, reason, nil, remaining
   end
   for _, alias in ipairs(ALIASES) do
     if unit ~= alias and SameUnit(unit, alias) then
-      local match = MatchUnitTooltip(alias)
+      local match, matchReason, matchDetail, matchRem = MatchUnitTooltip(alias)
       if match then
-        return match
+        return match, matchReason, matchDetail, matchRem
       end
     end
   end
@@ -394,18 +448,18 @@ local function NeededObjective(unit, tooltipData)
   -- of your quests. Only ever a yes; a no keeps the retries for a tooltip still loading.
   local related = C_QuestLog.UnitIsRelatedToActiveQuest and Read(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
   if kind == nil and related == true then
-    local guess, why = GuessKind(unit, MustBeSure())
+    local guess, why, guessRem = GuessKind(unit, MustBeSure())
     if guess then
-      return guess, "related"
+      return guess, "related", nil, guessRem
     end
     return false, why
   end
   -- The tooltip lists a quest, but the game hides which one and everything under it (inside dungeons):
   -- the mob is a quest mob, and your log says what you still need from quest mobs.
   if kind == nil and reason == QUEST_HIDDEN then
-    local guess, why = GuessKind(unit, MustBeSure())
+    local guess, why, guessRem = GuessKind(unit, MustBeSure())
     if guess then
-      return guess, "listed"
+      return guess, "listed", nil, guessRem
     end
     return false, why
   end
@@ -429,14 +483,71 @@ local function PlateUnit(plate)
   end
 end
 
+-- High-contrast remaining count pill layered on top of a marker or preview icon.
+local function AttachBadge(frame, anchor)
+  local W = Helper.Widgets
+  frame.countBg = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+  if W then
+    W.Slice(frame.countBg, "pill_fill.png", 12, 6, 12, 6)
+    W.SetColor(frame.countBg, 0.04, 0.05, 0.07, 0.94)
+    frame.countBorder = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    W.Slice(frame.countBorder, "pill_border.png", 12, 6, 12, 6)
+    W.SetColor(frame.countBorder, 0.28, 0.95, 0.56, 0.80)
+    frame.countBorder:SetAllPoints(frame.countBg)
+    frame.countBorder:Hide()
+  else
+    frame.countBg:SetColorTexture(0.04, 0.05, 0.07, 0.94)
+  end
+  frame.countBg:SetPoint("BOTTOMRIGHT", anchor or frame, "BOTTOMRIGHT", 4, -3)
+  frame.countBg:Hide()
+
+  frame.countText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  if frame.countText.SetDrawLayer then frame.countText:SetDrawLayer("OVERLAY", 3) end
+  frame.countText:SetPoint("CENTER", frame.countBg, "CENTER", 0, 0)
+  frame.countText:SetJustifyH("CENTER")
+  frame.countText:SetTextColor(0.35, 1.0, 0.55, 1)
+  frame.countText:SetShadowOffset(1, -1)
+  frame.countText:SetShadowColor(0, 0, 0, 0.95)
+  frame.countText:Hide()
+end
+
+local function UpdateBadge(frame, count, iconSize, show)
+  local visible = show ~= false and type(count) == "number" and count > 0
+  if not visible then
+    frame.count = nil
+    if frame.countBg then frame.countBg:Hide() end
+    if frame.countBorder then frame.countBorder:Hide() end
+    if frame.countText then frame.countText:Hide() end
+    return
+  end
+  local label = count > 99 and "99+" or tostring(count)
+  iconSize = type(iconSize) == "number" and iconSize or 22
+  local fontSize = math.max(9, math.min(16, math.floor(iconSize * 0.48 + 0.5)))
+  if frame.countFontSize ~= fontSize and frame.countText.SetFont then
+    local face = (frame.countText.GetFont and frame.countText:GetFont()) or "Fonts\\FRIZQT__.TTF"
+    pcall(frame.countText.SetFont, frame.countText, face, fontSize, "OUTLINE")
+    frame.countFontSize = fontSize
+  end
+  frame.countText:SetText(label)
+  local pillH = math.max(13, fontSize + 4)
+  local textW = (frame.countText.GetStringWidth and frame.countText:GetStringWidth()) or 0
+  local pillW = math.max(pillH, math.ceil(math.max(textW, #label * fontSize * 0.58)) + 6)
+  frame.countBg:SetSize(pillW, pillH)
+  frame.countBg:Show()
+  if frame.countBorder then frame.countBorder:Show() end
+  frame.countText:Show()
+  frame.count = count
+end
+
 local function NewMarker(parent)
   local marker = CreateFrame("Frame", nil, parent)
-  marker.icon = marker:CreateTexture(nil, "OVERLAY")
+  marker.icon = marker:CreateTexture(nil, "ARTWORK")
   marker.icon:SetAllPoints()
+  AttachBadge(marker, marker)
   return marker
 end
 
-local function SetMarkerArt(marker, kind)
+local function SetMarkerArt(marker, kind, remaining)
   local key = kind == "item" and settings.lootIcon or settings.killIcon
   local art = iconsByKey[key]
   if marker.art ~= art then
@@ -448,11 +559,12 @@ local function SetMarkerArt(marker, kind)
     marker:SetSize(settings.size, settings.size)
     marker.size = settings.size
   end
+  UpdateBadge(marker, remaining, settings.size, settings.showCount ~= false)
 end
 
-local function PaintMarker(marker, anchor, kind, placement)
+local function PaintMarker(marker, anchor, kind, placement, remaining)
   placement=placement or settings.placement
-  SetMarkerArt(marker, kind)
+  SetMarkerArt(marker, kind, remaining)
   if marker.anchor ~= anchor or marker.placement ~= placement then
     local position = PLACEMENTS[placement]
     marker:ClearAllPoints()
@@ -469,7 +581,7 @@ local function HideMarker(unit)
     marker:Hide()
     marker:ClearAllPoints()
     marker:SetParent(UIParent)
-    marker.anchor = nil
+    marker.anchor, marker.count = nil, nil
     markers[unit] = nil
     spareMarkers[#spareMarkers + 1] = marker
   end
@@ -552,7 +664,7 @@ local function FollowCursor(marker,elapsed)
   if not PositionAtCursor(marker) then HideCursorMarker() end
 end
 
-local function ShowMarker(unit, plate, kind)
+local function ShowMarker(unit, plate, kind, remaining)
   local marker = markers[unit]
   if not marker or marker:GetParent() ~= plate then
     HideMarker(unit)
@@ -565,7 +677,7 @@ local function ShowMarker(unit, plate, kind)
   local bar = HealthBar(plate)
   local level = Read((frame or plate).GetFrameLevel, frame or plate)
   if type(level) == "number" then marker:SetFrameLevel(level + 2) end
-  PaintMarker(marker, bar or plate, kind, not bar and "above" or nil)
+  PaintMarker(marker, bar or plate, kind, not bar and "above" or nil, remaining)
   marker.kind,marker.guid,marker.revision=kind,Read(UnitGUID,unit),questRevision
   marker:Show()
 end
@@ -609,7 +721,7 @@ end
 
 local function UpdateCursor(plate,data)
   if not WantsCursor(plate) then HideCursorMarker(); return false end
-  local kind=NeededObjective("mouseover",data)
+  local kind, _, _, remaining = NeededObjective("mouseover", data)
   local guid=Read(UnitGUID,"mouseover")
   if not kind then
     if kind~=nil or not guid or not cursorMarker or cursorMarker.guid~=guid or cursorMarker.revision~=questRevision
@@ -628,7 +740,7 @@ local function UpdateCursor(plate,data)
   local newlyMarked=not cursorMarker:IsShown() or cursorMarker.guid~=guid or cursorMarker.kind~=kind
   cursorMarker.kind,cursorMarker.guid,cursorMarker.plate,cursorMarker.revision=kind,guid,plate,questRevision
   cursorMarker.checkIn=0
-  SetMarkerArt(cursorMarker,kind)
+  SetMarkerArt(cursorMarker, kind, remaining)
   if PositionAtCursor(cursorMarker) then
     cursorMarker:Show()
     if newlyMarked and settings.recordLog~=false then
@@ -644,9 +756,9 @@ local function UpdateUnit(unit,plate,data)
   if not NeedsPlateMarker(unit,plate) then HideMarker(unit); return false end
   local previous=unitsByPlate[plate]
   if previous and previous ~= unit then HideMarker(previous) end
-  local needed,reason,detail=NeededObjective(unit,data)
+  local needed, reason, detail, remaining = NeededObjective(unit, data)
   if needed then
-    ShowMarker(unit, plate, needed)
+    ShowMarker(unit, plate, needed, remaining)
     Log(UnitLabel(unit), (needed == "item" and "marked as a loot source" or "marked as a kill objective")
       .. (reason == "related" and " (the game links it to your quest; its tooltip named none)" or "")
       .. (reason == "hidden" and " (the game hid its objective lines; decided by the quest its tooltip names)" or "")
@@ -659,7 +771,7 @@ local function UpdateUnit(unit,plate,data)
   local marker=markers[unit]
   if needed==nil and marker and marker:GetParent()==plate and marker.revision==questRevision
       and marker.guid and marker.guid==Read(UnitGUID,unit) then
-    ShowMarker(unit,plate,marker.kind)
+    ShowMarker(unit, plate, marker.kind, marker.count)
   else HideMarker(unit) end
   return needed
 end
@@ -856,7 +968,7 @@ local function Preview()
     end
   end
   for index, sample in ipairs(preview) do
-    PaintMarker(sample.marker, sample.plate, index == 1 and "monster" or "item")
+    PaintMarker(sample.marker, sample.plate, index == 1 and "monster" or "item", nil, index == 1 and 4 or 2)
     sample.marker:Show()
   end
   preview:Show()
@@ -920,6 +1032,8 @@ Helper.Feature(function()
     refresh = ScheduleRefresh,
     preview = Preview,
     check = CheckTarget,
+    attachBadge = AttachBadge,
+    updateBadge = UpdateBadge,
     reset = function()
       for key, value in pairs(defaults) do
         if key ~= "enabled" then settings[key] = value end

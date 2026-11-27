@@ -652,10 +652,10 @@ local function bulkProgress()
   end
   if removed == batch.total and batch.counted == removed then session.bulk=nil end
 end
-local function nativeSale(junk)
+local function nativeSale(junk, fromTicker)
   if not (C_MerchantFrame and C_MerchantFrame.SellAllJunkItems and C_MerchantFrame.IsSellAllJunkEnabled
       and C_MerchantFrame.IsSellAllJunkEnabled()) or GetCursorInfo() then return false end
-  local batch={items={},money=GetMoney(),at=GetTime(),total=0,credited=0,counted=0}
+  local batch={items={},money=GetMoney(),at=GetTime(),total=0,credited=0,counted=0,fromTicker=fromTicker or false}
   local counts = bagCounts()
   for _,item in ipairs(junk) do
     if item.grey then
@@ -705,7 +705,7 @@ local function Finish(reason)
     end
   end
   if pending then
-    if pending.blocked and not done.byClick then
+    if pending.blocked and (not done.byClick or pending.fromTicker) then
       Vendor.clickOnly = true
       Helper.Print("The game blocked automatic selling. Use the Sell items button under the vendor window.")
     else
@@ -721,7 +721,7 @@ local function MaySubmit()
     and (session.byClick or Helper.db.vendor.enabled)
 end
 
-local function Hand(item, now)
+local function Hand(item, now, fromTicker)
   if not MaySubmit() or session.pending or GetCursorInfo() ~= nil then return false end
   local info = C_Container.GetContainerItemInfo(item.bag, item.slot)
   if not eligible(info,item.bag,item.slot)
@@ -730,7 +730,7 @@ local function Hand(item, now)
       or (item.guid and Helper.BagItemGUID(item.bag, item.slot) ~= item.guid) then return false end
 
   local attempt = {
-    item = item, at = now, generation = generation, issuing = true,
+    item = item, at = now, generation = generation, issuing = true, fromTicker = fromTicker or false,
     bagCount = Helper.CountBagItem(item.itemID), buyback = BuybackCounts(item), money = GetMoney(), full = GetNumBuybackItems() >= (BUYBACK_ITEMS_PER_PAGE or 12),
   }
   if not MaySubmit() then return false end
@@ -751,7 +751,7 @@ local function Step()
     if session.bulk then
       if not session.bulk.blocked and now-session.bulk.at < SETTLE then return end
       if session.bulk.blocked then
-        if not session.byClick then
+        if not session.byClick or session.bulk.fromTicker then
           Vendor.clickOnly = true
           Helper.Print("The game blocked automatic selling. Use Sell items at the merchant.")
         end
@@ -761,7 +761,7 @@ local function Step()
       -- Not all confirmed yet: what is left (greys the bulk sale missed, and the white items you chose) is
       -- sold one stack at a time below. (Before 1.30 the whites were skipped for the visit.)
       session.bulk = nil
-      if session.byClick then
+      if session.byClick and Vendor.clickOnly then
         Finish("done")
         return
       end
@@ -774,24 +774,24 @@ local function Step()
     end
     return
   end
-  if not MaySubmit() or session.byClick then
+  if not MaySubmit() or (session.byClick and Vendor.clickOnly) then
     Finish(session.cancelled and "disabled" or "done")
     return
   end
   if now - session.startedAt >= MAX_SECONDS then Finish("timeout"); return end
 
-  local junk, loading = Vendor.FindJunk(true)
+  local junk, loading = Vendor.FindJunk(not session.byClick)
   if not session.triedBulk then
     if loading and now - session.startedAt < SETTLE then return end
     session.triedBulk = true
-    if not loading and nativeSale(junk) then return end
+    if not loading and nativeSale(junk, true) then return end
   end
   local handed = 0
   for _, item in ipairs(junk) do
     local uncertainLink = uncertainLinks[item.key]
     local previouslySubmitted = uncertainStacks[item.guid] or uncertainLink == "unknown stack"
       or (not item.guid and uncertainLink ~= nil)
-    if not previouslySubmitted and Hand(item, now) then
+    if not previouslySubmitted and Hand(item, now, true) then
       handed = handed + 1
       if not session or session.pending or handed >= PER_TICK then return end
     end
@@ -825,17 +825,20 @@ function Vendor.SellNow()
   local junk, loading = Vendor.FindJunk()
   if #junk == 0 then Helper.Print("No sale items with a known price are ready."); return end
   if not Begin(true) then Helper.Print("Item sales are unavailable at this vendor."); return end
-  if not loading and nativeSale(junk) then
-    bulkProgress()
-    if session.bulk then return end
-    junk = Vendor.FindJunk()
+  if not loading then
+    session.triedBulk = true
+    if nativeSale(junk, false) then
+      bulkProgress()
+      if session.bulk then return end
+      junk = Vendor.FindJunk()
+    end
   end
   local now = GetTime()
   for index, item in ipairs(junk) do
     if index > CLICK_MAX then break end
-    Hand(item, now)
-    -- Additional protected requests belong to another hardware click if
-    -- the game hasn't confirmed this stack by the time the call returns.
+    Hand(item, now, false)
+    -- Once an async stack is in flight, Step() handles the remaining stacks
+    -- unless clickOnly requires another hardware click.
     if not session or session.pending then break end
   end
   Step()
