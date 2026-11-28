@@ -11,7 +11,7 @@ local _, Helper = ...
 local W, Options, Store = Helper.Widgets, Helper.Options, Helper.Store
 
 local window, scroll, content, heading, subheading, enabled, sidebar, ghost, headerIcon, headerLine, scrollbar
-local headerBadge, railDivider, footerBg, footerLine
+local headerBadge, railDivider, footerBg, footerLine, updatesTab
 local moreButton, showAllButton, searchBox, confirmBar
 local current, focused, searchText = "home", false, ""
 local minHeight = 540   -- raised to fit the rail when it holds more pages
@@ -976,6 +976,36 @@ editors.questSamples = function()
   y = y + 100
 end
 
+editors.characterCopy = function(_, _, _, card)
+  if card and #card.actions > 0 then
+    y = y + 4
+    actionRow(card.actions)
+    card.actions = {}
+    y = y + 6
+  end
+  subtitle("Character settings")
+  note("Sell & repair, Quick destroy, Auto-open, Spell ranks, and Talk & quests are saved per character. Flight timer, Fast loot, Mailbox, Quest markers, Gather tooltips, Minimap buttons, and frame positions are shared account-wide.")
+  local others = Helper.Characters and Helper.Characters.List() or {}
+  if #others == 0 then
+    note("Log in on another character to copy per-character settings and item lists between characters.")
+    return
+  end
+  local rows = {}
+  for _, info in ipairs(others) do
+    local charKey = info.key
+    rows[#rows + 1] = {
+      label = "Copy from " .. info.label,
+      tooltip = tipFor("Copy from " .. info.label, "Copies Sell & repair, Quick destroy, Auto-open, Spell ranks, and Talk & quests settings and item lists from this character. Undo takes it back."),
+      action = function()
+        if Helper.Characters then
+          Helper.Characters.CopyAll(charKey)
+        end
+      end,
+    }
+  end
+  tiles(rows, #rows == 1 and 1 or 2)
+end
+
 -- Options --------------------------------------------------------------------------------------------------
 
 -- Draws the options of `spec` that belong on `cardName` (or all of `list`, for search results). Actions are
@@ -1052,7 +1082,7 @@ local function renderOptions(spec, list, ctx, card, cardName)
           option.build(root, Options.DB(spec, option), Options.Command(spec, option), ctx, Options.Kit())
           inline(root, owner)
         elseif kind == "custom" then
-          if editors[option.render] then editors[option.render](spec, option, ctx) end
+          if editors[option.render] then editors[option.render](spec, option, ctx, card) end
         elseif kind == "note" then
           note(option.text)
         end
@@ -1151,7 +1181,11 @@ end
 local function drawFeature(spec)
   local db = Helper.db[spec.key]
   local ctx = Options.Context(spec, true)
-  setHeader(spec.icon, spec.title, spec.description)
+  local desc = spec.description or ""
+  if spec.key ~= "general" then
+    desc = desc .. (spec.perChar and "  ·  Per-character" or "  ·  Account-wide")
+  end
+  setHeader(spec.icon, spec.title, desc)
   local command = spec.command and Helper.commands[spec.command]
   local switchable = db and db.enabled ~= nil and command ~= nil and spec.defaults and spec.defaults.enabled ~= nil
   enabled:SetShown(switchable)
@@ -1318,6 +1352,32 @@ local function drawHome()
   note("Search above the page list to find any setting. Click any card for its settings or use its switch to toggle it.")
 end
 
+local function drawUpdates()
+  if Helper.Intro and Helper.Intro.MarkSeen then Helper.Intro.MarkSeen() end
+  setHeader(rtwIcon, "What's new", "Recent ReadyToWork updates and fixes")
+  enabled:Hide(); moreButton:Hide()
+  local changelog = Helper.Intro and Helper.Intro.Changelog or {}
+  if #changelog == 0 then
+    note("No release notes available.")
+    return
+  end
+  for i, entry in ipairs(changelog) do
+    local title = "Version " .. tostring(entry.version or "") .. (entry.newModule and "  ·  New module" or "")
+    local card = CardStart(title)
+    if i == 1 then
+      card.headerActions[#card.headerActions + 1] = {
+        label = "Introduction",
+        tip = "Open the ReadyToWork overview window.",
+        run = function() if Helper.ShowIntro then Helper.ShowIntro() end end,
+      }
+    end
+    for _, line in ipairs(entry.notes or {}) do
+      note("•  " .. line)
+    end
+    CardFinish(card)
+  end
+end
+
 local function drawSearch()
   setHeader("INV_Misc_Spyglass_02", "Search", ('Settings matching "%s"'):format(searchText))
   enabled:Hide(); moreButton:Hide()
@@ -1345,6 +1405,12 @@ local function updateRail()
       tab.setDot(isFeatureActive(key, Helper.db[key]))
     end
   end
+  if updatesTab then
+    tint(updatesTab, current == "updates" and searchText == "")
+    if updatesTab.setUnread then
+      updatesTab.setUnread(Helper.Intro and Helper.Intro.HasUnread and Helper.Intro.HasUnread() == true)
+    end
+  end
 end
 
 draw = function()
@@ -1356,6 +1422,7 @@ draw = function()
   confirmBar:Hide()
   local spec = Spec()
   if searchText ~= "" then drawSearch()
+  elseif current == "updates" then drawUpdates()
   elseif spec and spec.section then drawFeature(spec)
   else current = "home"; drawHome() end
   updateRail()
@@ -1542,7 +1609,44 @@ local function build()
       navY = navY + 30
     end
   end
-  minHeight = math.max(540, navY + 18)
+
+  local updatesLine = W.Solid(sidebar, "BORDER", cDiv[1], cDiv[2], cDiv[3], cDiv[4] or .065)
+  updatesLine:SetPoint("BOTTOMLEFT", 14, 40); updatesLine:SetPoint("BOTTOMRIGHT", -14, 40); updatesLine:SetHeight(1)
+  updatesTab = CreateFrame("Button", nil, sidebar)
+  updatesTab.isRailTab = true
+  updatesTab.bg, updatesTab.border = W.Surface(updatesTab, "md", { 1, 1, 1, 0 }, { 1, 1, 1, 0 })
+  updatesTab:SetSize(RAIL - 16, 26); updatesTab:SetPoint("BOTTOMLEFT", 8, 7)
+  updatesTab.accent = updatesTab:CreateTexture(nil, "ARTWORK")
+  W.Slice(updatesTab.accent, "pill_fill.png", 12, 6, 12, 6)
+  W.SetColor(updatesTab.accent, unpack(W.colors.accent))
+  updatesTab.accent:SetSize(3, 14); updatesTab.accent:SetPoint("LEFT", 3, 0)
+  W.Highlight(updatesTab, "md")
+  local uText = W.Font(updatesTab, "dim")
+  uText:SetPoint("LEFT", 12, 0); uText:SetPoint("RIGHT", -22, 0)
+  if uText.SetWordWrap then uText:SetWordWrap(false) end
+  uText:SetText("What's new  ·  v" .. (Helper.version or ""))
+  updatesTab.name = uText
+  local setDot, unreadDot, unreadGlow = W.Dot(updatesTab)
+  unreadDot:SetPoint("RIGHT", -10, 0)
+  local function setUnread(unread)
+    if unread then
+      setDot(true)
+      unreadDot:Show()
+    else
+      unreadDot:Hide()
+      unreadGlow:Hide()
+    end
+  end
+  setUnread(false)
+  updatesTab.setUnread = setUnread
+  updatesTab:SetScript("OnClick", function()
+    stopDrag()
+    if searchBox and searchBox:GetText() ~= "" then searchBox:SetText(""); searchText = "" end
+    current = "updates"; scroll:SetVerticalScroll(0); draw()
+  end)
+  W.Tooltip(updatesTab, "What's new", "View recent ReadyToWork updates and release notes.", "ANCHOR_RIGHT")
+
+  minHeight = math.max(560, navY + 58)
 
   -- Header.
   local close = W.Button(window, "", "ghost")
@@ -1567,7 +1671,7 @@ local function build()
   moreButton:SetSize(28, 28); moreButton:SetPoint("RIGHT", close, "LEFT", -6, 0)
   moreButton.glyph = W.Glyph(moreButton, "icon_more.png", 14, W.colors.label)
   moreButton.glyph:SetPoint("CENTER")
-  W.Tooltip(moreButton, "More", "Restore this page's defaults, or undo this page's changes.", "ANCHOR_BOTTOM")
+  W.Tooltip(moreButton, "More", "Restore defaults, copy from another character, or undo this page's changes.", "ANCHOR_BOTTOM")
   moreButton:SetScript("OnClick", function(self)
     local spec = Spec()
     if not spec then return end
@@ -1575,6 +1679,18 @@ local function build()
     if not (MenuUtil and MenuUtil.CreateContextMenu) then confirm(); return end
     MenuUtil.CreateContextMenu(self, function(_, root)
       root:CreateButton("Restore defaults...", confirm)
+      if spec.perChar and Helper.Characters then
+        local others = Helper.Characters.List()
+        if #others > 0 then
+          local sub = root:CreateButton("Copy from character")
+          for _, charInfo in ipairs(others) do
+            sub:CreateButton(charInfo.label, function()
+              Helper.Characters.CopyFeature(charInfo.key, spec.key)
+              draw()
+            end)
+          end
+        end
+      end
       local count = Store.Info(spec.key)
       if count > 0 then
         root:CreateButton("Undo this page's last change", function() Store.Undo(spec.key); draw() end)
@@ -1739,7 +1855,7 @@ local function build()
     end
   end)
   for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "ACTIVE_TALENT_GROUP_CHANGED", "BAG_UPDATE_DELAYED", "MERCHANT_SHOW",
-      "MERCHANT_CLOSED", "GET_ITEM_INFO_RECEIVED" }) do
+      "MERCHANT_CLOSED", "MAIL_SHOW", "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "GET_ITEM_INFO_RECEIVED" }) do
     pcall(window.RegisterEvent, window, event)
   end
   window:SetScript("OnEvent", function(self, event, itemID, success)
@@ -1747,8 +1863,9 @@ local function build()
     local key = current
     if event == "PLAYER_REGEN_ENABLED" or (event == "ACTIVE_TALENT_GROUP_CHANGED" and (key == "barProfiles" or key == "home")) then draw()
     elseif (event == "MERCHANT_SHOW" or event == "MERCHANT_CLOSED") and (key == "vendor" or key == "home") then draw()
+    elseif (event == "MAIL_SHOW" or event == "MAIL_CLOSED" or event == "MAIL_INBOX_UPDATE") and (key == "mailbox" or key == "home") then draw()
     elseif event == "GET_ITEM_INFO_RECEIVED" and success and key == "destroy" and Helper.db.destroy.keep and Helper.db.destroy.keep[itemID] == true then draw()
-    elseif event == "BAG_UPDATE_DELAYED" and (key == "open" or key == "destroy" or key == "home" or (key == "vendor" and bagPickerOpen)) then
+    elseif event == "BAG_UPDATE_DELAYED" and (key == "open" or key == "fastLoot" or key == "mailbox" or key == "destroy" or key == "home" or (key == "vendor" and bagPickerOpen)) then
       if not bagDrawPending then
         bagDrawPending = true
         C_Timer.After(0.25, function()
@@ -1780,7 +1897,8 @@ end
 
 local function open(name, oneFeature)
   local spec = Helper.FeatureByName(name)
-  if spec and spec.section then current = spec.key
+  if name == "updates" or name == "changelog" then current = "updates"
+  elseif spec and spec.section then current = spec.key
   elseif name == "home" then current = "home" end
   if not window then build() end
   finishResize(); stopDrag()

@@ -1,6 +1,6 @@
 # ReadyToWork
 
-Quality-of-life helpers for **World of Warcraft: Forever** (`v1.57.3`).
+Quality-of-life helpers for **World of Warcraft: Forever** (`v1.59.0`).
 
 Formerly **BalHelper** and **Minimap Fan** — your settings for both carry over automatically, and `/bh`, `/balhelper`, `/minifan`, and `/mmfan` still work alongside `/rtw` and `/readytowork`.
 
@@ -15,9 +15,10 @@ Formerly **BalHelper** and **Minimap Fan** — your settings for both carry over
   - **Mouse wheel:** page through the fan.
   - **Drag:** move around the minimap (round or square).
 - **Settings window (`/rtw settings` or `/rtw settings <page>`):**
-  - Left rail with **Search**, **Home** (live status cards with toggles), and every page grouped by category with live on/off status dots.
-  - Each page shows **Status** (live stat chips and quick actions), **Behavior**, **Appearance & position** (including **Move**), and **Lists**, plus a **···** menu (**Restore defaults...**, **Undo this page's last change**, **Undo this page's changes since opening**).
+  - Left rail with **Search**, **Home** (live status cards with toggles), every page grouped by category with live on/off status dots, and a quiet **What's new** (`CHANGELOG`) button at the bottom (`/rtw updates`).
+  - Each page shows **Status** (live stat chips and quick actions), **Behavior**, **Appearance & position** (including **Move**), and **Lists**, plus a **···** menu (**Restore defaults...**, **Copy from character** on per-character pages, **Undo this page's last change**, **Undo this page's changes since opening**).
   - Footer with **Undo** (takes back the newest change made anywhere: window, quick menu, `/rtw` command, or frame drag), **Revert visit**, and **Reload UI**.
+  - **Per-character vs. account-wide settings:** **Sell & repair**, **Auto-open**, **Quick destroy**, **Spell ranks**, and **Talk & quests** are saved per character (existing characters keep their lists; new alts start clean). Copy settings between characters via **General > Character settings**, a page's **···** menu, or `/rtw copy [character] [helper]`.
 - **Unlock mode (`/rtw unlock`, General > Unlock frames, or key binding):**
   - Outlines ReadyToWork's movable frames (**Destroy button**, **Bar profile swap button**, **Flight timer**), even while hidden.
   - Drag to move, mouse wheel to resize, right-click to reset. **Done**, Escape, or `/rtw unlock` ends it.
@@ -25,8 +26,8 @@ Formerly **BalHelper** and **Minimap Fan** — your settings for both carry over
 - **Key bindings & AddOns entry:**
   - Listed under **Options > AddOns > ReadyToWork**.
   - Bindings under **Options > Keybindings > ReadyToWork**: Settings window, Quick menu, Unlock frames, Skip talk, Accept quests, Turn in quests.
-- **Introduction (`/rtw intro` or General > Introduction):**
-  - Shown automatically on fresh installs and once after each version update (preserving all saved settings) until **Don't show automatically on future updates** is ticked.
+- **Introduction & What's new (`/rtw intro`, `/rtw updates`, or General > Introduction):**
+  - The full **Introduction** opens automatically only for brand-new installs, while major new-module releases open a compact **What's new** dialog unless dismissed; optional chat update notices can be opted into via **Announce updates in chat**.
 - **Undo & Defaults:**
   - `/rtw undo` takes back the newest settings edit (up to 50 edits per session).
   - `/rtw reset <name>` restores one helper's settings to defaults while keeping your custom lists, bar profiles, and frame positions.
@@ -46,6 +47,17 @@ Formerly **BalHelper** and **Minimap Fan** — your settings for both carry over
 - Pauses cleanly if bags fill up and docks an **Open all** bar on your open bags so you can resume with one click.
 - Locked lockboxes and items on your **Never open** list are skipped.
 - **Commands:** `/rtw open [on|off|now|openall|clams|common|all|free <n>|chat on|off|skip <item>|unskip <item>|list]`.
+
+### Fast loot (`/rtw loot`, `/rtw fastloot`)
+- Grabs every unlocked loot slot in a single frame on `LOOT_READY` / `LOOT_OPENED` without the ~0.4s loot-window delay or flash.
+- Safely restores the loot window whenever a **Bind on Pickup** prompt, locked/Master Loot slot, full bag, or `Shift` override key occurs.
+- **Commands:** `/rtw loot [on|off|hide [on|off]|always [on|off]]`.
+
+### Mailbox (`/rtw mail`)
+- Adds a compact bar below the Inbox with **Gold only** (works even at `0` free bag slots) and **Collect all** (respects **Keep free bag slots**, skips CoD, GM mail, and failed/`Unique` items cleanly, and reports one summary in chat).
+- Adds an **Alts & recent recipients** dropdown next to `To:` on **Send Mail** showing your characters (with Forever first+last names) and recent recipients.
+- Strictly zero-loss: never deletes or returns mail, never reads unread letters, and never auto-sends.
+- **Commands:** `/rtw mail [on|off|all|gold|free <0-10>|alts [on|off]|chat [on|off]|clearrecent]`.
 
 ### Quick destroy (`/rtw destroy`)
 - Shows a movable button offering your cheapest junk (gray items, optional **Conjured mage food** / **Conjured mage water** smallest stack first, and any bag items dropped onto it).

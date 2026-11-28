@@ -193,7 +193,7 @@ function Destroy.ShouldShow(found)
     return false
   end
   -- While the choices are out the button stays, even once there is room.
-  return found.included or fanOpen or settings.mode == "always" or Destroy.FreeSlots() <= settings.freeSlots
+  return fanOpen or settings.mode == "always" or Destroy.FreeSlots() <= settings.freeSlots
 end
 
 -- Destroying ------------------------------------------------------------------

@@ -283,6 +283,354 @@ frame:SetScript("OnEvent", function(_, event, ...)
   end
 end)
 
+local function ReadableText(value)
+  return not (issecretvalue and issecretvalue(value)) and type(value) == "string" and value ~= ""
+end
+
+local function DeepCopy(value)
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for key, item in pairs(value) do
+    copy[key] = DeepCopy(item)
+  end
+  return copy
+end
+
+local function ValuesEqual(a, b)
+  if a == b then return true end
+  if type(a) ~= "table" or type(b) ~= "table" then return false end
+  for key, value in pairs(a) do
+    if not ValuesEqual(value, b[key]) then return false end
+  end
+  for key in pairs(b) do
+    if a[key] == nil then return false end
+  end
+  return true
+end
+
+local function IsRealmText(text, realm, normRealm)
+  if not ReadableText(text) then return false end
+  local low = text:lower()
+  if ReadableText(realm) and (low == realm:lower() or low == realm:gsub("%s+", ""):lower()) then
+    return true
+  end
+  return ReadableText(normRealm) and low == normRealm:lower()
+end
+
+local function CombineNameAndSurname(first, second, realm, normRealm)
+  if not ReadableText(first) then return nil end
+  if ReadableText(second) and not IsRealmText(second, realm, normRealm)
+      and not first:find(" ", 1, true) and not first:find("-", 1, true) then
+    return first .. " " .. second
+  end
+  return first
+end
+
+local function ReadPlayerRealmInfo()
+  local realm, normRealm, regional = nil, nil, false
+  if type(GetRealmName) == "function" then
+    local ok, r = pcall(GetRealmName)
+    if ok and ReadableText(r) then realm = r end
+  end
+  if type(GetNormalizedRealmName) == "function" then
+    local ok, r = pcall(GetNormalizedRealmName)
+    if ok and ReadableText(r) then normRealm = r end
+  end
+  local regFn = _G.RegionalUniqueNamesEnabled
+  if type(regFn) == "function" then
+    local ok, flag = pcall(regFn)
+    if ok and flag == true then regional = true end
+  end
+  return realm, normRealm, regional
+end
+
+-- Returns the player's full name ("First Last" on Forever realms with surnames, or "Name" otherwise).
+function Helper.PlayerFullName()
+  local realm, normRealm, regional = ReadPlayerRealmInfo()
+  local first, second
+  if type(UnitFullName) == "function" then
+    local ok, a, b = pcall(UnitFullName, "player")
+    if ok and ReadableText(a) then
+      first, second = a, b
+    end
+  end
+  if type(UnitName) == "function" and (not ReadableText(first) or not ReadableText(second)) then
+    local ok, a, b = pcall(UnitName, "player")
+    if ok then
+      if not ReadableText(first) and ReadableText(a) then first = a end
+      if not ReadableText(second) and ReadableText(b) then second = b end
+    end
+  end
+  local combined = CombineNameAndSurname(first, second, realm, normRealm)
+  if ReadableText(combined) and combined:find(" ", 1, true) then
+    return combined
+  end
+  if regional and type(GetUnitName) == "function" then
+    local ok, uName = pcall(GetUnitName, "player", true)
+    if ok and ReadableText(uName) then
+      local clean = uName:gsub("%s*%([^%)]+%)$", "")
+      local head, tail = clean:match("^([^-]+)%-(.+)$")
+      if head and tail and not IsRealmText(tail, realm, normRealm) then
+        return head .. " " .. tail
+      end
+      if clean:find(" ", 1, true) then
+        return clean
+      end
+    end
+  end
+  return combined or (ReadableText(first) and first) or nil
+end
+
+local function ResolveCharKey()
+  if type(UnitGUID) == "function" then
+    local ok, guid = pcall(UnitGUID, "player")
+    if ok and ReadableText(guid) then return guid end
+  end
+  local name = Helper.PlayerFullName()
+  if ReadableText(name) then
+    local realm = ReadPlayerRealmInfo()
+    return name .. "-" .. (realm or "?")
+  end
+end
+
+local function FormatCharLabel(info)
+  local name = ReadableText(info and info.name) and info.name or "Unknown"
+  local level = type(info and info.level) == "number" and info.level > 0 and info.level or nil
+  local className = ReadableText(info and info.className) and info.className or nil
+  if level and className then
+    return ("%s (%d %s)"):format(name, level, className)
+  elseif level then
+    return ("%s (%d)"):format(name, level)
+  elseif className then
+    return ("%s (%s)"):format(name, className)
+  end
+  return name
+end
+
+-- Binds per-character features (`perChar = true`) under `saved.chars[charKey]` while leaving
+-- account-wide settings on `saved`. Returns the active db table (`view`, or `saved` when unit
+-- identity is unavailable in minimal test fixtures).
+function Helper.BindCharacter(saved)
+  Helper.saved = saved
+  if type(saved) ~= "table" then
+    Helper.db, Helper.charKey = nil, nil
+    return nil
+  end
+  local charKey = ResolveCharKey()
+  if not charKey then
+    Helper.db, Helper.charKey = saved, nil
+    return saved
+  end
+  if type(saved.chars) ~= "table" then saved.chars = {} end
+  local char = saved.chars[charKey]
+  local lvl = nil
+  if type(UnitLevel) == "function" then
+    local okLvl, rawLvl = pcall(UnitLevel, "player")
+    if okLvl and type(rawLvl) == "number" and not (issecretvalue and issecretvalue(rawLvl)) and rawLvl > 0 then
+      lvl = rawLvl
+    end
+  end
+
+  if type(char) ~= "table" then
+    char = {}
+    saved.chars[charKey] = char
+    local knownInBars = type(saved.bars) == "table" and type(saved.bars[charKey]) == "table"
+    -- Existing characters (seen in bars, level > 1, or test runs without UnitLevel) keep their
+    -- pre-1.59 lists so upgrading never breaks their setup; brand-new level-1 alts start clean.
+    local isExisting = knownInBars or (lvl == nil) or (lvl > 1)
+    for _, key in ipairs(Helper.featureOrder) do
+      local spec = Helper.features[key]
+      if spec and spec.perChar then
+        char[key] = {}
+        local legacy = isExisting and type(saved[key]) == "table" and saved[key] or nil
+        if legacy then
+          for _, field in ipairs(spec.prefs or {}) do
+            if legacy[field] ~= nil then
+              char[key][field] = DeepCopy(legacy[field])
+            end
+          end
+          if key == "maxSpells" and type(legacy.seen) == "table" and type(legacy.seen[charKey]) == "table" then
+            char[key].seen = { [charKey] = DeepCopy(legacy.seen[charKey]) }
+          end
+          if key == "vendor" then
+            local hasStats = (tonumber(legacy.lifetime) or 0) > 0
+              or (tonumber(legacy.repairSpent) or 0) > 0
+              or (tonumber(legacy.repairGuildSpent) or 0) > 0
+              or (type(legacy.log) == "table" and #legacy.log > 0)
+            if hasStats then
+              char[key].lifetime = legacy.lifetime or 0
+              char[key].repairSpent = legacy.repairSpent or 0
+              char[key].repairGuildSpent = legacy.repairGuildSpent or 0
+              if type(legacy.today) == "table" then char[key].today = DeepCopy(legacy.today) end
+              if type(legacy.log) == "table" then char[key].log = DeepCopy(legacy.log) end
+              legacy.lifetime, legacy.repairSpent, legacy.repairGuildSpent = 0, 0, 0
+              legacy.today, legacy.log = nil, {}
+            end
+          end
+        end
+        if spec.defaults then FillDefaults(char[key], spec.defaults) end
+      end
+    end
+  else
+    for _, key in ipairs(Helper.featureOrder) do
+      local spec = Helper.features[key]
+      if spec and spec.perChar then
+        if type(char[key]) ~= "table" then char[key] = {} end
+        if spec.defaults then FillDefaults(char[key], spec.defaults) end
+      end
+    end
+  end
+
+  local pName = Helper.PlayerFullName()
+  if ReadableText(pName) then char.name = pName end
+  if type(UnitClass) == "function" then
+    local okClass, cName, cFile = pcall(UnitClass, "player")
+    if okClass then
+      if ReadableText(cName) then char.className = cName end
+      if ReadableText(cFile) then char.class = cFile end
+    end
+  end
+  if lvl then char.level = lvl end
+  local realm, normRealm = ReadPlayerRealmInfo()
+  if realm then char.realm = realm end
+  if type(UnitFactionGroup) == "function" then
+    local okFac, faction = pcall(UnitFactionGroup, "player")
+    if okFac and ReadableText(faction) then char.faction = faction end
+  end
+  if type(time) == "function" then char.seen = time() end
+  for otherKey, info in pairs(saved.chars) do
+    if otherKey ~= charKey and type(info) == "table" and ReadableText(info.name) and not info.name:find(" ", 1, true) then
+      local fn, sn
+      if type(UnitNameFromGUID) == "function" then
+        local okU, a, b = pcall(UnitNameFromGUID, otherKey)
+        if okU and ReadableText(a) then fn, sn = a, b end
+      end
+      if (not ReadableText(fn) or not ReadableText(sn)) and type(GetPlayerInfoByGUID) == "function" then
+        local okP, _, _, _, _, _, a, b = pcall(GetPlayerInfoByGUID, otherKey)
+        if okP and ReadableText(a) then
+          if not ReadableText(fn) then fn = a end
+          if not ReadableText(sn) then sn = b end
+        end
+      end
+      local full = CombineNameAndSurname(fn, sn, info.realm or realm, normRealm)
+      if ReadableText(full) and full:find(" ", 1, true) then
+        info.name = full
+      end
+    end
+  end
+
+  local view = {}
+  for _, key in ipairs(Helper.featureOrder) do
+    local spec = Helper.features[key]
+    if spec and spec.perChar then
+      view[key] = char[key]
+    end
+  end
+  setmetatable(view, {
+    __index = saved,
+    __newindex = function(_, key, value)
+      local spec = Helper.features[key]
+      if spec and spec.perChar then
+        char[key] = value
+        view[key] = value
+      else
+        saved[key] = value
+      end
+    end,
+  })
+  Helper.db, Helper.charKey = view, charKey
+  return view
+end
+
+Helper.Characters = {}
+
+function Helper.Characters.IsPerChar(key)
+  local spec = Helper.features[key]
+  return spec ~= nil and spec.perChar == true
+end
+
+function Helper.Characters.Current()
+  local saved = Helper.saved
+  local key = Helper.charKey
+  return key, saved and type(saved.chars) == "table" and key and saved.chars[key] or nil
+end
+
+function Helper.Characters.List()
+  local saved, current = Helper.saved, Helper.charKey
+  local list = {}
+  if not (saved and type(saved.chars) == "table") then return list end
+  for key, info in pairs(saved.chars) do
+    if key ~= current and type(info) == "table" then
+      list[#list + 1] = {
+        key = key,
+        name = info.name,
+        realm = info.realm,
+        faction = info.faction,
+        class = info.class,
+        className = info.className,
+        level = info.level,
+        label = FormatCharLabel(info),
+      }
+    end
+  end
+  table.sort(list, function(a, b)
+    local al, bl = (a.name or a.key):lower(), (b.name or b.key):lower()
+    if al ~= bl then return al < bl end
+    return tostring(a.key) < tostring(b.key)
+  end)
+  return list
+end
+
+function Helper.Characters.CopyFeature(sourceKey, featureKey)
+  local spec = Helper.features[featureKey]
+  local saved = Helper.saved
+  if not (spec and spec.perChar and saved and type(saved.chars) == "table") then return false end
+  if not sourceKey or sourceKey == Helper.charKey then return false end
+  local srcChar = saved.chars[sourceKey]
+  local src = type(srcChar) == "table" and srcChar[featureKey]
+  local dst = Helper.db and Helper.db[featureKey]
+  if type(src) ~= "table" or type(dst) ~= "table" then return false end
+
+  local label = FormatCharLabel(srcChar)
+  local captured = spec.capture and spec.capture(dst)
+  local changed, count = {}, 0
+  local function applyCopy()
+    for _, field in ipairs(spec.prefs or {}) do
+      local nextVal = src[field]
+      if not ValuesEqual(dst[field], nextVal) then
+        dst[field] = DeepCopy(nextVal)
+        changed[field] = true
+        count = count + 1
+      end
+    end
+    if spec.defaults then FillDefaults(dst, spec.defaults) end
+  end
+  if Helper.Store and Helper.Store.Edit then
+    Helper.Store.Edit(featureKey, "Copy from " .. (srcChar.name or label), applyCopy)
+    if count > 0 and Helper.Store.Apply then
+      Helper.Store.Apply(featureKey, changed, captured)
+    end
+  else
+    applyCopy()
+  end
+  return true, count, label
+end
+
+function Helper.Characters.CopyAll(sourceKey)
+  local saved = Helper.saved
+  local srcChar = saved and type(saved.chars) == "table" and saved.chars[sourceKey]
+  if type(srcChar) ~= "table" or sourceKey == Helper.charKey then return false end
+  local copied = 0
+  for _, key in ipairs(Helper.featureOrder) do
+    local spec = Helper.features[key]
+    if spec and spec.perChar then
+      local ok, count = Helper.Characters.CopyFeature(sourceKey, key)
+      if ok and count > 0 then copied = copied + 1 end
+    end
+  end
+  return true, copied, FormatCharLabel(srcChar)
+end
+
 -- Prepares the saved table: migrations first (they read the old shapes), then any missing defaults.
 -- Returns the table to use, or nil when it was written by a newer ReadyToWork (see Core\Migrate.lua).
 function Helper.PrepareSaved(saved)
@@ -304,12 +652,13 @@ Helper.On("ADDON_LOADED", function(name)
   if name == ADDON then
     local db, saved = Helper.PrepareSaved(ReadyToWorkDB)
     ReadyToWorkDB = saved
+    Helper.saved = db
     Helper.db = db
   end
 end)
 
 Helper.On("PLAYER_LOGIN", function()
-  if not Helper.db then
+  if not Helper.saved then
     if Helper.savedTooNew then
       Helper.Print(("Your saved settings come from a newer ReadyToWork (saved-data version %d; this one reads up to %d), so ReadyToWork stays off and leaves them untouched. Install the newer version again."):format(Helper.savedTooNew, Helper.SCHEMA))
     end
@@ -320,9 +669,10 @@ Helper.On("PLAYER_LOGIN", function()
   local ok, oldLoaded = pcall(isLoaded or function() end, "BalHelper")
   if ok and oldLoaded then
     Helper.Print("The old BalHelper addon is still loaded, so ReadyToWork stays off. Remove the BalHelper folder from AddOns and /reload.")
-    Helper.db = nil
+    Helper.saved, Helper.db, Helper.charKey = nil, nil, nil
     return
   end
+  Helper.BindCharacter(Helper.saved)
   for _, start in ipairs(starters) do
     Call(start)
   end
@@ -332,6 +682,89 @@ Helper.On("PLAYER_LOGIN", function()
     Helper.Print("BalHelper is now called ReadyToWork, and Minimap Fan is part of it. Your settings came across. /rtw lists the commands and /rtw menu opens the settings; /bh and /minifan still work.")
   end
 end)
+
+Helper.On("PLAYER_LEVEL_UP", function(level)
+  local _, char = Helper.Characters.Current()
+  if not char then return end
+  local n = not (issecretvalue and issecretvalue(level)) and tonumber(level) or nil
+  if not n and type(UnitLevel) == "function" then
+    local ok, cur = pcall(UnitLevel, "player")
+    if ok and not (issecretvalue and issecretvalue(cur)) then n = tonumber(cur) end
+  end
+  if n and n > 0 then char.level = n end
+end)
+
+local function FindCharacter(query)
+  local list = Helper.Characters.List()
+  local needle = (query or ""):lower():match("^%s*(.-)%s*$")
+  if needle == "" then return nil, list end
+  for _, entry in ipairs(list) do
+    if (entry.name and entry.name:lower() == needle) or entry.key:lower() == needle then
+      return entry, list
+    end
+  end
+  for _, entry in ipairs(list) do
+    if (entry.name and entry.name:lower():sub(1, #needle) == needle) or entry.label:lower():find(needle, 1, true) then
+      return entry, list
+    end
+  end
+  return nil, list
+end
+
+Helper.commands.copy = function(_, typed)
+  local trimmed = (typed or ""):match("^%s*(.-)%s*$")
+  local entry, others = FindCharacter(trimmed)
+  local featureArg = ""
+  if not entry then
+    local head, tail = trimmed:match("^(.-)%s+(%S+)$")
+    if head and tail then
+      local cand, list = FindCharacter(head)
+      others = list
+      local spec = Helper.FeatureByName and Helper.FeatureByName(tail)
+      if cand and (spec or (cand.name and cand.name:find(" ", 1, true))) then
+        entry, featureArg = cand, tail
+      end
+    end
+  end
+  if not entry and featureArg == "" then
+    local first, rest = trimmed:match("^(%S+)%s*(.-)$")
+    if first and first ~= "" then
+      entry, others = FindCharacter(first)
+      featureArg = rest or ""
+    end
+  end
+  if not entry then
+    if #others == 0 then
+      Helper.Print("Log in on another character first so ReadyToWork has a character to copy from.")
+    else
+      local names = {}
+      for _, info in ipairs(others) do names[#names + 1] = info.label end
+      Helper.Print("Usage: /rtw copy <character> [helper]  ·  Characters: " .. table.concat(names, ", "))
+    end
+    return
+  end
+  if featureArg ~= "" then
+    local spec = Helper.FeatureByName and Helper.FeatureByName(featureArg)
+    if not (spec and spec.perChar) then
+      Helper.Print("Per-character helpers you can copy: vendor, destroy, open, spells, talk.")
+      return
+    end
+    local ok, changed, label = Helper.Characters.CopyFeature(entry.key, spec.key)
+    if ok then
+      Helper.Print(changed > 0
+        and ("Copied %s settings from %s. /rtw undo takes it back."):format(spec.title or spec.key, label)
+        or ("%s settings already match %s."):format(spec.title or spec.key, label))
+    end
+    return
+  end
+  local ok, copied, label = Helper.Characters.CopyAll(entry.key)
+  if ok then
+    Helper.Print(copied > 0
+      and ("Copied %d per-character helper%s from %s. /rtw undo takes it back."):format(copied, copied == 1 and "" or "s", label)
+      or ("Your per-character settings already match %s."):format(label))
+  end
+end
+Helper.help[#Helper.help + 1] = "/rtw copy [character] [helper] - copy per-character settings from another character"
 
 -- /readytowork and /rtw (and /balhelper, /bh from its old name) -------------------
 

@@ -489,6 +489,10 @@ function Open.IsPausedForSpace()
   return pausedForSpace == true
 end
 
+function Open.IsOpening()
+  return pending ~= nil
+end
+
 function Open.WaitingCount()
   return #Open.List()
 end

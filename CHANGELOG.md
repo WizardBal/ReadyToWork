@@ -1,5 +1,29 @@
 # ReadyToWork Changelog
 
+## 1.59.0 (2026-11-28): Fast loot, Mailbox, per-character settings & quiet changelog
+
+- **New module — Fast loot (`FastLoot.lua`):**
+  - Collects all unlocked loot slots in one frame on `LOOT_READY` / `LOOT_OPENED` without the ~0.4s loot window delay or flash, while standing aside for **Auto-open** container loot sessions.
+  - Safely suppresses the brief `LootFrame` visual flash with `SetAlpha(0)` (never calling `Hide()` or `CloseLoot()` while server loot is in flight) and immediately restores the window for `LOOT_BIND_CONFIRM`, locked/Master Loot slots, full-bag errors (`ERR_INV_FULL`), modifier-key holds (`Shift`), or a `0.30s` safety reveal check.
+  - Supports **Hide loot window while fast-looting** and **Auto-loot even when WoW Auto Loot is off** toggles plus an inline **Enable WoW Auto Loot** quick action (`/rtw loot [on|off|hide|always]`).
+- **New module — Mailbox (`Mailbox.lua`):**
+  - Adds a compact Inbox bottom bar with **Gold only** and **Collect all** plus a high-contrast emerald dropdown beside `To:` on **Send Mail** for **Alts & recent recipients**.
+  - Collects gold even when your bags have `0` free slots, honors a configurable **Keep free bag slots** reserve (`0–10`) for item attachments, and skips CoD, GM mail, and failed/`Unique` items cleanly with one chat summary.
+  - Strictly zero-loss: never calls `DeleteInboxItem`, `ReturnInboxItem`, `GetInboxText`, or `SendMail`.
+- **WoW Forever full character names & Per-character settings (`Core/Core.lua`, `Core/Migrate.lua`, `Core/Features.lua`):**
+  - Split **Sell & repair**, **Auto-open**, **Quick destroy**, **Spell ranks**, and **Talk & quests** per character while keeping **Fast loot**, **Mailbox**, **Bar profiles** (per-char/per-spec storage), **Quest markers**, **Gather tooltips**, **Flight timer**, **Minimap buttons**, and frame positions account-wide; existing characters automatically inherit their lists while brand-new level-1 alts start clean.
+  - Added **Copy from character** under **General → Character settings**, each per-character page's `···` menu, and `/rtw copy [character] [helper]`.
+  - Resolved WoW Forever two-word character names (`UnitFullName("player")` / `UnitNameFromGUID` / `GetPlayerInfoByGUID`, e.g. `"Hexual Angst"`) and live `PLAYER_LEVEL_UP` level updates across character lists, Mail recipients, and `/rtw copy`.
+- **Quick destroy & Changelog UI polish (`QuickDestroy.lua`, `UI/Intro.lua`, `UI/Window.lua`):**
+  - Fixed **Quick destroy** showing while plenty of bag slots are free even when manually included items are in your bags.
+  - Full **Introduction** now auto-shows only for brand-new installs (`"Show update notifications in chat"` opt-in, off by default), compact **New module** popup shows only when `newModule = true`, and a quiet **What's new** button lives at the bottom of the Settings sidebar (`/rtw updates`), with its unread dot completely hidden once read and **General** workspace buttons grouped above **Character settings**.
+
+## 1.58.0 (2026-11-27): Batch Sell items, quest count badges & Hyjal/Riverglades flight times
+
+- **Sell & repair (`AutoVendor.lua`):** Fixed manual **Sell items (#)** stopping after a single stack; clicking once now sells all eligible gray and opted-in white items across async merchant ticks (unless Blizzard blocks bulk sales).
+- **Quest markers (`QuestKills.lua`, `Core/Features.lua`, `UI/Window.lua`):** Added high-contrast remaining kill/loot count pill badges on nameplate markers, cursor hover markers, and Settings previews (`Show remaining count`).
+- **Flight timer (`FlightTimes.lua`, `FlightTimer.lua`):** Added Mount Hyjal (`Summit of Eternity`, `Tainted Foothills`) and Riverglades (`Farholde Keep`, `Rog'mar`) route estimates and clearer untimed-route wording.
+
 ## 1.57.3 (2026-11-26): Intro checkbox & close button fix
 
 - **Introduction window (`UI/Intro.lua`, `UI/Widgets.lua`):**

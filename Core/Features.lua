@@ -55,7 +55,7 @@ function Helper.Declare(spec)
 end
 
 -- Saved sections that belong to no single feature.
-local CORE_DEFAULTS = { positions = {} }
+local CORE_DEFAULTS = { positions = {}, chars = {} }
 
 -- The defaults for the whole saved table, built from the declarations.
 function Helper.Defaults()
@@ -186,7 +186,7 @@ Helper.generalTips = {
 
 Declare{
   key = "vendor", title = "Sell & repair", oldTitle = "Vendors", aliases = { "Auto-sell greys", "Auto-sell grays" }, command = "vendor",
-  icon = "INV_Misc_Coin_01", group = "Bags & Vendors", section = true,
+  icon = "INV_Misc_Coin_01", group = "Bags & Vendors", section = true, perChar = true,
   description = "Repairs, then sells your gray items and white items you choose, when you open a vendor.",
   rowTip = "Repairs and sells your gray items when a vendor opens. Hold Shift while opening the vendor to skip both once.",
   -- today: { day, items, copper, repaired } daily summary. included: chosen white items, [item ID] = name.
@@ -275,7 +275,7 @@ Declare{
 
 Declare{
   key = "open", title = "Auto-open", oldTitle = "Containers", aliases = { "Auto-open containers", "Open containers" }, command = "open",
-  icon = "INV_Box_01", group = "Bags & Vendors", section = true,
+  icon = "INV_Box_01", group = "Bags & Vendors", section = true, perChar = true,
   description = "Opens clams and other containers in your bags when it's safe to.",
   -- which: "clams", "common" (white and grey containers) or "all". keepFree: open only with this many bag
   -- slots free. skip: item IDs never to open (-> their link).
@@ -346,8 +346,123 @@ Declare{
 }
 
 Declare{
+  key = "fastLoot", title = "Fast loot", aliases = { "fastloot", "speedloot", "Speed loot" }, command = "loot",
+  icon = "INV_Misc_Bag_10", group = "Bags & Vendors", section = true,
+  description = "Grabs all loot slots at once without waiting on the loot window.",
+  rowTip = "Picks up every unlocked loot slot in one frame without the loot window delay or flash. Hold your Auto Loot key (Shift by default) to inspect loot normally.",
+  defaults = { enabled = true, hideWindow = true, always = false },
+  prefs = { "enabled", "hideWindow", "always" },
+  status = function(db)
+    local cvarOn = Helper.FastLoot and Helper.FastLoot.GameAutoLootOn and Helper.FastLoot.GameAutoLootOn()
+    local mode = db.always and "Active even with WoW Auto Loot off"
+      or (cvarOn and "WoW Auto Loot is on" or "WoW Auto Loot is off (hold Shift or enable below)")
+    return { mode, db.hideWindow ~= false and "Hides loot window flash" or "Keeps loot window visible" }
+  end,
+  statusChips = function(db)
+    local cvarOn = Helper.FastLoot and Helper.FastLoot.GameAutoLootOn and Helper.FastLoot.GameAutoLootOn()
+    return {
+      { label = "WoW Auto Loot", value = cvarOn and "On" or "Off",
+        tone = cvarOn and "accent" or (db.always and "dim" or "warn") },
+      { label = "Loot window", value = db.hideWindow ~= false and "Hidden" or "Shown",
+        tone = db.hideWindow ~= false and "accent" or "dim" },
+      { label = "Free slots", value = tostring(Helper.FreeSlots and Helper.FreeSlots() or 0) },
+    }
+  end,
+  options = {
+    { type = "action", label = "Enable WoW Auto Loot", card = "status", header = true,
+      tip = "Turns on the game's built-in Auto Loot setting so looting happens without holding a modifier key.",
+      when = function(db)
+        return not db.always and Helper.FastLoot ~= nil and Helper.FastLoot.GameAutoLootOn ~= nil
+          and not Helper.FastLoot.GameAutoLootOn()
+      end,
+      run = function()
+        if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("autoLootDefault", "1")
+        elseif SetCVar then SetCVar("autoLootDefault", "1") end
+      end },
+    { type = "toggle", key = "hideWindow", label = "Hide loot window while fast-looting", cmd = "hide",
+      tip = "Hides the brief loot window flash when everything can be picked up at once. Automatically shows the window if bags are full, a slot is locked, or an item needs confirmation." },
+    { type = "toggle", key = "always", label = "Auto-loot even when WoW Auto Loot is off", cmd = "always",
+      tip = "Fast-loots automatically even if the game's Auto Loot setting is switched off. Hold your Auto Loot key (Shift by default) to open the loot window normally." },
+    { type = "note", text = "Hold your Auto Loot key (Shift by default) while looting to open the loot window normally. Bind-on-Pickup prompts, locked slots, and items that don't fit in full bags always show the loot window." },
+  },
+  apply = function()
+    if Helper.FastLoot and Helper.FastLoot.Apply then Helper.FastLoot.Apply() end
+  end,
+}
+
+Declare{
+  key = "mailbox", title = "Mailbox", aliases = { "mail" }, command = "mail",
+  icon = "INV_Letter_15", group = "Bags & Vendors", section = true,
+  description = "Collects gold even with full bags, honors a free-slot reserve, and adds an alt picker when sending.",
+  rowTip = "Safe one-click Collect all / Gold only bar on your inbox plus an Alts & Recent dropdown on Send Mail. Never deletes letters or touches CoD/GM mail.",
+  defaults = { enabled = true, keepFree = 0, altPicker = true, reportChat = true, recent = {} },
+  prefs = { "enabled", "keepFree", "altPicker", "reportChat", "recent" },
+  noReset = { recent = true },
+  status = function(db)
+    local mail = Helper.Mailbox
+    if mail and mail.IsOpen and mail.IsOpen() then
+      local sum = mail.Summary and mail.Summary() or { gold = 0, stacks = 0 }
+      return {
+        sum.gold > 0 and ("Inbox gold: " .. Helper.Money(sum.gold)) or "No inbox gold waiting",
+        sum.stacks > 0 and ("%d item stack%s waiting"):format(sum.stacks, sum.stacks == 1 and "" or "s")
+          or "No attachments waiting",
+      }
+    end
+    local keep = db.keepFree or 0
+    return {
+      keep > 0 and ("Keeps %d free bag slot%s"):format(keep, keep == 1 and "" or "s")
+        or "Collects until bags are full (gold always collected)",
+      ("%d recent recipient%s saved"):format(#(db.recent or {}), #(db.recent or {}) == 1 and "" or "s"),
+    }
+  end,
+  statusChips = function(db)
+    local mail = Helper.Mailbox
+    local isOpen = mail and mail.IsOpen and mail.IsOpen()
+    local sum = isOpen and mail.Summary and mail.Summary() or nil
+    local alts = Helper.Characters and Helper.Characters.List and #Helper.Characters.List() or 0
+    local chips = {}
+    if sum then
+      chips[#chips + 1] = {
+        label = "Inbox gold",
+        value = sum.gold > 0 and Helper.Money(sum.gold) or "None",
+        tone = sum.gold > 0 and "accent" or "dim",
+      }
+      chips[#chips + 1] = {
+        label = "Attachments",
+        value = sum.stacks > 0 and ("%d stack%s"):format(sum.stacks, sum.stacks == 1 and "" or "s") or "None",
+        tone = sum.stacks > 0 and "accent" or "dim",
+      }
+    end
+    chips[#chips + 1] = {
+      label = "Free-slot reserve",
+      value = (db.keepFree or 0) > 0 and tostring(db.keepFree) or "0 (none)",
+    }
+    chips[#chips + 1] = { label = "Known alts", value = tostring(alts) }
+    chips[#chips + 1] = { label = "Recent", value = tostring(#(db.recent or {})) }
+    return chips
+  end,
+  options = {
+    { type = "slider", key = "keepFree", label = "Keep free bag slots", min = 0, max = 10, cmd = "free",
+      menuChoices = { 0, 1, 2, 4 }, menuFormat = function(n) return n == 0 and "None needed" or ("Keep " .. n) end,
+      tip = "Stops taking item attachments once only this many bag slots remain free. Gold is still collected even with full bags." },
+    { type = "toggle", key = "altPicker", label = "Show Alts & Recent picker on Send Mail", cmd = "alts",
+      tip = "Adds a quick dropdown button next to the To box on Send Mail to fill in any character on your account or a recent recipient." },
+    { type = "toggle", key = "reportChat", label = "Report collected mail in chat", cmd = "chat",
+      tip = "Prints one short summary line after a batch finishes showing how much gold and how many items were collected." },
+    { type = "action", label = "Clear recent recipients", danger = true, card = "lists",
+      when = function(db) return type(db.recent) == "table" and #db.recent > 0 end,
+      tip = "Forgets recently mailed names (your own account characters stay in the list).",
+      run = function(_, command) command("clearrecent") end },
+    { type = "note", text = "100% zero-loss safe: Mailbox never deletes or returns mail, never auto-sends, and always skips CoD and GM messages." },
+  },
+  apply = function()
+    if Helper.Mailbox and Helper.Mailbox.Apply then Helper.Mailbox.Apply() end
+  end,
+}
+
+Declare{
   key = "destroy", title = "Quick destroy", oldTitle = "Destroy button", command = "destroy",
-  icon = "INV_Gizmo_02", group = "Bags & Vendors", section = true, position = "destroy",
+  icon = "INV_Gizmo_02", group = "Bags & Vendors", section = true, perChar = true, position = "destroy",
   frames = { destroy = "Destroy button" },
   description = "A button that offers your cheapest junk to destroy when your bags fill up.",
   -- mode "full": the button shows when `freeSlots` or fewer bag slots are free; "always": whenever there is
@@ -569,7 +684,7 @@ Declare{
 
 Declare{
   key = "maxSpells", title = "Spell ranks", oldTitle = "Max spell ranks", command = "spells", aliases = { "maxspells" },
-  icon = "INV_Misc_Book_03", group = "Action bars", section = true, menuAlways = true,
+  icon = "INV_Misc_Book_03", group = "Action bars", section = true, perChar = true, menuAlways = true,
   description = "Keeps your bars on the highest rank of each spell, and places new spells.",
   rowTip = "Keeps your action bars on the highest rank of each spell you know, and places newly learned spells in empty slots.",
   -- enabled: upgrade bar spells to the highest rank known. autoPlace: put newly learned spells in empty bar
@@ -665,7 +780,7 @@ Declare{
 
 Declare{
   key = "talk", title = "Talk & quests", command = "talk",
-  icon = "INV_Misc_Note_01", group = "World", section = true,
+  icon = "INV_Misc_Note_01", group = "World", section = true, perChar = true,
   description = "Skips NPC chat, accepts quests and hands them in: three switches, each on its own.",
   rowTip = "Three separate switches: Skip talk picks an NPC's only chat line page after page; Auto-accept takes offered quests; Auto-turn in hands in finished ones. A strip of buttons on the dialog and quest windows flips them. Hold Shift while you start talking to do it yourself that time.",
   -- buttons: where the Skip talk / Accept / Turn in strip sits on the dialogue and quest windows.
@@ -828,7 +943,8 @@ Declare{
   singleCard = true, cardTitle = "Workspace & controls",
   description = "Moving ReadyToWork's frames, key bindings and the introduction.",
   -- hints: [positions key] = true once that frame's one-line hint was shown.
-  defaults = { hints = {} },
+  defaults = { hints = {}, updateChat = false },
+  prefs = { "updateChat" },
   status = function()
     local count = 0
     for _ in pairs(Helper.Frames and Helper.Frames.Movable() or {}) do count = count + 1 end
@@ -843,10 +959,14 @@ Declare{
   end,
   options = {
     { type = "note", text = "Unlock frames outlines every RTW frame so you can drag to move, scroll to resize, or right-click to reset. Alt-drag also moves any frame anytime." },
+    { type = "toggle", key = "updateChat", label = "Announce updates in chat",
+      tip = "Prints a short chat notice once when ReadyToWork updates to a new version (off by default)." },
     { type = "action", label = "Unlock frames", run = function() Helper.commands.unlock() end },
     { type = "action", label = "Key bindings", tip = "Opens the game's key bindings, where ReadyToWork's are under ReadyToWork.",
       run = function() if Helper.OpenKeyBindings then Helper.OpenKeyBindings() end end },
     { type = "action", label = "Introduction", run = function() if Helper.ShowIntro then Helper.ShowIntro() end end },
     { type = "action", label = "Reset positions", danger = true, run = function() Helper.ResetPositions() end },
+    { type = "custom", render = "characterCopy", label = "Character settings",
+      tip = "Copy per-character settings and item lists from another character on this account." },
   },
 }

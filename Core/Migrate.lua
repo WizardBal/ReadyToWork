@@ -4,7 +4,7 @@
 
 local _, Helper = ...
 
-Helper.SCHEMA = 5
+Helper.SCHEMA = 6
 
 local STEPS = {}
 
@@ -56,6 +56,14 @@ STEPS[5] = function(db)
   end
   if type(db.general) == "table" and type(db.general.hints) == "table" then
     db.general.hints.rares = nil
+  end
+end
+
+-- 5 -> 6 (ReadyToWork 1.59.0). Per-character settings live under ReadyToWorkDB.chars[guid], seeded
+-- seamlessly on each existing character's first login from the pre-1.59 top-level tables.
+STEPS[6] = function(db)
+  if type(db.chars) ~= "table" then
+    db.chars = {}
   end
 end
 
